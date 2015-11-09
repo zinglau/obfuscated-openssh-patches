@@ -1,6 +1,6 @@
 diff -Nurp openssh-6.8p1/kex.c openssh-6.8p1-ob/kex.c
 --- openssh-6.8p1/kex.c	2015-03-17 13:49:20.000000000 +0800
-+++ openssh-6.8p1-ob/kex.c	2015-11-06 17:02:10.929398749 +0800
++++ openssh-6.8p1-ob/kex.c	2015-11-06 17:38:30.669407113 +0800
 @@ -282,6 +282,7 @@ kex_input_newkeys(int type, u_int32_t se
  	kex->flags &= ~KEX_INIT_SENT;
  	free(kex->name);
@@ -11,7 +11,7 @@ diff -Nurp openssh-6.8p1/kex.c openssh-6.8p1-ob/kex.c
  
 diff -Nurp openssh-6.8p1/Makefile.in openssh-6.8p1-ob/Makefile.in
 --- openssh-6.8p1/Makefile.in	2015-03-17 13:49:20.000000000 +0800
-+++ openssh-6.8p1-ob/Makefile.in	2015-11-06 17:02:10.929398749 +0800
++++ openssh-6.8p1-ob/Makefile.in	2015-11-06 17:38:30.673407113 +0800
 @@ -91,7 +91,7 @@ LIBSSH_OBJS=${LIBOPENSSH_OBJS} \
  	sc25519.o ge25519.o fe25519.o ed25519.o verify.o hash.o blocks.o \
  	kex.o kexdh.o kexgex.o kexecdh.o kexc25519.o \
@@ -23,7 +23,7 @@ diff -Nurp openssh-6.8p1/Makefile.in openssh-6.8p1-ob/Makefile.in
  	sshconnect.o sshconnect1.o sshconnect2.o mux.o \
 diff -Nurp openssh-6.8p1/obfuscate.c openssh-6.8p1-ob/obfuscate.c
 --- openssh-6.8p1/obfuscate.c	1970-01-01 08:00:00.000000000 +0800
-+++ openssh-6.8p1-ob/obfuscate.c	2015-11-06 17:02:10.929398749 +0800
++++ openssh-6.8p1-ob/obfuscate.c	2015-11-06 17:38:30.673407113 +0800
 @@ -0,0 +1,210 @@
 +#include "includes.h"
 +#include <openssl/evp.h>
@@ -237,7 +237,7 @@ diff -Nurp openssh-6.8p1/obfuscate.c openssh-6.8p1-ob/obfuscate.c
 +}
 diff -Nurp openssh-6.8p1/obfuscate.h openssh-6.8p1-ob/obfuscate.h
 --- openssh-6.8p1/obfuscate.h	1970-01-01 08:00:00.000000000 +0800
-+++ openssh-6.8p1-ob/obfuscate.h	2015-11-06 17:02:10.929398749 +0800
++++ openssh-6.8p1-ob/obfuscate.h	2015-11-06 17:38:30.673407113 +0800
 @@ -0,0 +1,10 @@
 +#ifndef _OBFUSCATE_H
 +#define _OBFUSCATE_H
@@ -251,7 +251,7 @@ diff -Nurp openssh-6.8p1/obfuscate.h openssh-6.8p1-ob/obfuscate.h
 +#endif
 diff -Nurp openssh-6.8p1/packet.c openssh-6.8p1-ob/packet.c
 --- openssh-6.8p1/packet.c	2015-03-17 13:49:20.000000000 +0800
-+++ openssh-6.8p1-ob/packet.c	2015-11-06 17:18:15.525402450 +0800
++++ openssh-6.8p1-ob/packet.c	2015-11-06 17:38:30.673407113 +0800
 @@ -84,6 +84,7 @@
  #include "ssh.h"
  #include "packet.h"
@@ -345,7 +345,7 @@ diff -Nurp openssh-6.8p1/packet.c openssh-6.8p1-ob/packet.c
 +}
 diff -Nurp openssh-6.8p1/packet.h openssh-6.8p1-ob/packet.h
 --- openssh-6.8p1/packet.h	2015-03-17 13:49:20.000000000 +0800
-+++ openssh-6.8p1-ob/packet.h	2015-11-06 17:02:10.929398749 +0800
++++ openssh-6.8p1-ob/packet.h	2015-11-06 17:38:30.677407113 +0800
 @@ -162,6 +162,8 @@ int     sshpkt_disconnect(struct ssh *,
  	    __attribute__((format(printf, 2, 3)));
  int	sshpkt_add_padding(struct ssh *, u_char);
@@ -357,7 +357,7 @@ diff -Nurp openssh-6.8p1/packet.h openssh-6.8p1-ob/packet.h
  int	sshpkt_putb(struct ssh *ssh, const struct sshbuf *b);
 diff -Nurp openssh-6.8p1/readconf.c openssh-6.8p1-ob/readconf.c
 --- openssh-6.8p1/readconf.c	2015-03-17 13:49:20.000000000 +0800
-+++ openssh-6.8p1-ob/readconf.c	2015-11-06 17:02:10.933398749 +0800
++++ openssh-6.8p1-ob/readconf.c	2015-11-06 17:38:30.677407113 +0800
 @@ -131,7 +131,7 @@ typedef enum {
  	oBadOption,
  	oHost, oMatch,
@@ -403,7 +403,7 @@ diff -Nurp openssh-6.8p1/readconf.c openssh-6.8p1-ob/readconf.c
  	options->request_tty = -1;
 diff -Nurp openssh-6.8p1/readconf.h openssh-6.8p1-ob/readconf.h
 --- openssh-6.8p1/readconf.h	2015-03-17 13:49:20.000000000 +0800
-+++ openssh-6.8p1-ob/readconf.h	2015-11-06 17:02:10.933398749 +0800
++++ openssh-6.8p1-ob/readconf.h	2015-11-06 17:38:30.677407113 +0800
 @@ -129,6 +129,8 @@ typedef struct {
  	char	*local_command;
  	int	permit_local_command;
@@ -415,7 +415,7 @@ diff -Nurp openssh-6.8p1/readconf.h openssh-6.8p1-ob/readconf.h
  
 diff -Nurp openssh-6.8p1/scp.c openssh-6.8p1-ob/scp.c
 --- openssh-6.8p1/scp.c	2015-03-17 13:49:20.000000000 +0800
-+++ openssh-6.8p1-ob/scp.c	2015-11-06 17:02:10.933398749 +0800
++++ openssh-6.8p1-ob/scp.c	2015-11-06 17:38:30.677407113 +0800
 @@ -396,7 +396,7 @@ main(int argc, char **argv)
  	addargs(&args, "-oClearAllForwardings=yes");
  
@@ -443,7 +443,7 @@ diff -Nurp openssh-6.8p1/scp.c openssh-6.8p1-ob/scp.c
  			addargs(&args, "-%c", ch);
 diff -Nurp openssh-6.8p1/servconf.c openssh-6.8p1-ob/servconf.c
 --- openssh-6.8p1/servconf.c	2015-03-17 13:49:20.000000000 +0800
-+++ openssh-6.8p1-ob/servconf.c	2015-11-06 17:02:10.933398749 +0800
++++ openssh-6.8p1-ob/servconf.c	2015-11-06 17:38:30.681407113 +0800
 @@ -77,6 +77,7 @@ initialize_server_options(ServerOptions
  
  	/* Standard Options */
@@ -543,7 +543,7 @@ diff -Nurp openssh-6.8p1/servconf.c openssh-6.8p1-ob/servconf.c
   parse_int:
 diff -Nurp openssh-6.8p1/servconf.h openssh-6.8p1-ob/servconf.h
 --- openssh-6.8p1/servconf.h	2015-03-17 13:49:20.000000000 +0800
-+++ openssh-6.8p1-ob/servconf.h	2015-11-06 17:02:10.933398749 +0800
++++ openssh-6.8p1-ob/servconf.h	2015-11-06 17:38:30.681407113 +0800
 @@ -174,6 +174,11 @@ typedef struct {
  	int	num_permitted_opens;
  
@@ -558,7 +558,7 @@ diff -Nurp openssh-6.8p1/servconf.h openssh-6.8p1-ob/servconf.h
  	char   *authorized_principals_file;
 diff -Nurp openssh-6.8p1/sftp.c openssh-6.8p1-ob/sftp.c
 --- openssh-6.8p1/sftp.c	2015-03-17 13:49:20.000000000 +0800
-+++ openssh-6.8p1-ob/sftp.c	2015-11-06 17:02:10.937398749 +0800
++++ openssh-6.8p1-ob/sftp.c	2015-11-06 17:38:30.681407113 +0800
 @@ -2265,12 +2265,13 @@ main(int argc, char **argv)
  	infile = stdin;
  
@@ -584,7 +584,7 @@ diff -Nurp openssh-6.8p1/sftp.c openssh-6.8p1-ob/sftp.c
  			break;
 diff -Nurp openssh-6.8p1/ssh.c openssh-6.8p1-ob/ssh.c
 --- openssh-6.8p1/ssh.c	2015-03-17 13:49:20.000000000 +0800
-+++ openssh-6.8p1-ob/ssh.c	2015-11-06 17:36:06.993406561 +0800
++++ openssh-6.8p1-ob/ssh.c	2015-11-06 17:38:30.685407113 +0800
 @@ -200,14 +200,15 @@ static void
  usage(void)
  {
@@ -628,7 +628,7 @@ diff -Nurp openssh-6.8p1/ssh.c openssh-6.8p1-ob/ssh.c
  		}
 diff -Nurp openssh-6.8p1/sshconnect.c openssh-6.8p1-ob/sshconnect.c
 --- openssh-6.8p1/sshconnect.c	2015-03-17 13:49:20.000000000 +0800
-+++ openssh-6.8p1-ob/sshconnect.c	2015-11-06 17:02:10.937398749 +0800
++++ openssh-6.8p1-ob/sshconnect.c	2015-11-06 17:38:30.685407113 +0800
 @@ -63,6 +63,7 @@
  #include "monitor_fdpass.h"
  #include "ssh2.h"
@@ -716,7 +716,7 @@ diff -Nurp openssh-6.8p1/sshconnect.c openssh-6.8p1-ob/sshconnect.c
  
 diff -Nurp openssh-6.8p1/sshd.c openssh-6.8p1-ob/sshd.c
 --- openssh-6.8p1/sshd.c	2015-03-17 13:49:20.000000000 +0800
-+++ openssh-6.8p1-ob/sshd.c	2015-11-06 17:19:50.557402815 +0800
++++ openssh-6.8p1-ob/sshd.c	2015-11-06 17:38:30.685407113 +0800
 @@ -121,6 +121,7 @@
  #endif
  #include "monitor_wrap.h"
@@ -834,3 +834,15 @@ diff -Nurp openssh-6.8p1/sshd.c openssh-6.8p1-ob/sshd.c
  	} else if (compat20 && have_agent) {
  		if ((r = ssh_get_authentication_socket(&auth_sock)) != 0) {
  			error("Unable to get agent socket: %s", ssh_err(r));
+diff -Nurp openssh-6.8p1/sshd_config openssh-6.8p1-ob/sshd_config
+--- openssh-6.8p1/sshd_config	2015-03-17 13:49:20.000000000 +0800
++++ openssh-6.8p1-ob/sshd_config	2015-11-09 18:34:42.682414583 +0800
+@@ -11,6 +11,8 @@
+ # default value.
+ 
+ #Port 22
++#ObfuscatedPort 222
++#ObfuscateKeyword key
+ #AddressFamily any
+ #ListenAddress 0.0.0.0
+ #ListenAddress ::

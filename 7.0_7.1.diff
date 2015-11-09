@@ -838,3 +838,15 @@ diff -Nurp openssh-7.0p1/sshd.c openssh-7.0p1-ob/sshd.c
  	} else if (compat20 && have_agent) {
  		if ((r = ssh_get_authentication_socket(&auth_sock)) != 0) {
  			error("Unable to get agent socket: %s", ssh_err(r));
+diff -Nurp openssh-7.0p1/sshd_config openssh-7.0p1-ob/sshd_config
+--- openssh-7.0p1/sshd_config	2015-08-11 16:57:29.000000000 +0800
++++ openssh-7.0p1-ob/sshd_config	2015-11-09 17:41:27.870402325 +0800
+@@ -11,6 +11,8 @@
+ # default value.
+ 
+ #Port 22
++#ObfuscatedPort 222
++#ObfuscateKeyword key
+ #AddressFamily any
+ #ListenAddress 0.0.0.0
+ #ListenAddress ::

@@ -1,6 +1,6 @@
 diff -Nurp openssh-6.2p1/kex.c openssh-6.2p1-ob/kex.c
 --- openssh-6.2p1/kex.c	2013-01-09 13:12:19.000000000 +0800
-+++ openssh-6.2p1-ob/kex.c	2015-11-06 13:31:52.181350332 +0800
++++ openssh-6.2p1-ob/kex.c	2015-11-09 18:45:22.434417038 +0800
 @@ -186,6 +186,8 @@ kex_finish(Kex *kex)
  	kex->flags &= ~KEX_INIT_SENT;
  	xfree(kex->name);
@@ -12,7 +12,7 @@ diff -Nurp openssh-6.2p1/kex.c openssh-6.2p1-ob/kex.c
  void
 diff -Nurp openssh-6.2p1/Makefile.in openssh-6.2p1-ob/Makefile.in
 --- openssh-6.2p1/Makefile.in	2013-03-07 23:37:13.000000000 +0800
-+++ openssh-6.2p1-ob/Makefile.in	2015-11-06 13:31:52.185350332 +0800
++++ openssh-6.2p1-ob/Makefile.in	2015-11-09 18:45:22.442417038 +0800
 @@ -73,7 +73,7 @@ LIBSSH_OBJS=authfd.o authfile.o bufaux.o
  	monitor_fdpass.o rijndael.o ssh-dss.o ssh-ecdsa.o ssh-rsa.o dh.o \
  	kexdh.o kexgex.o kexdhc.o kexgexc.o bufec.o kexecdh.o kexecdhc.o \
@@ -24,7 +24,7 @@ diff -Nurp openssh-6.2p1/Makefile.in openssh-6.2p1-ob/Makefile.in
  	sshconnect.o sshconnect1.o sshconnect2.o mux.o \
 diff -Nurp openssh-6.2p1/obfuscate.c openssh-6.2p1-ob/obfuscate.c
 --- openssh-6.2p1/obfuscate.c	1970-01-01 08:00:00.000000000 +0800
-+++ openssh-6.2p1-ob/obfuscate.c	2015-11-06 13:31:52.185350332 +0800
++++ openssh-6.2p1-ob/obfuscate.c	2015-11-09 18:45:22.442417038 +0800
 @@ -0,0 +1,210 @@
 +#include "includes.h"
 +#include <openssl/evp.h>
@@ -238,7 +238,7 @@ diff -Nurp openssh-6.2p1/obfuscate.c openssh-6.2p1-ob/obfuscate.c
 +}
 diff -Nurp openssh-6.2p1/obfuscate.h openssh-6.2p1-ob/obfuscate.h
 --- openssh-6.2p1/obfuscate.h	1970-01-01 08:00:00.000000000 +0800
-+++ openssh-6.2p1-ob/obfuscate.h	2015-11-06 13:31:52.185350332 +0800
++++ openssh-6.2p1-ob/obfuscate.h	2015-11-09 18:45:22.442417038 +0800
 @@ -0,0 +1,10 @@
 +#ifndef _OBFUSCATE_H
 +#define _OBFUSCATE_H
@@ -252,7 +252,7 @@ diff -Nurp openssh-6.2p1/obfuscate.h openssh-6.2p1-ob/obfuscate.h
 +#endif
 diff -Nurp openssh-6.2p1/packet.c openssh-6.2p1-ob/packet.c
 --- openssh-6.2p1/packet.c	2013-02-12 08:03:59.000000000 +0800
-+++ openssh-6.2p1-ob/packet.c	2015-11-06 13:31:52.185350332 +0800
++++ openssh-6.2p1-ob/packet.c	2015-11-09 18:45:22.442417038 +0800
 @@ -77,6 +77,7 @@
  #include "canohost.h"
  #include "misc.h"
@@ -349,7 +349,7 @@ diff -Nurp openssh-6.2p1/packet.c openssh-6.2p1-ob/packet.c
  {
 diff -Nurp openssh-6.2p1/packet.h openssh-6.2p1-ob/packet.h
 --- openssh-6.2p1/packet.h	2012-02-11 05:19:21.000000000 +0800
-+++ openssh-6.2p1-ob/packet.h	2015-11-06 13:31:52.189350332 +0800
++++ openssh-6.2p1-ob/packet.h	2015-11-09 18:45:22.446417038 +0800
 @@ -38,6 +38,8 @@ void     packet_set_interactive(int, int
  int      packet_is_interactive(void);
  void     packet_set_server(void);
@@ -361,7 +361,7 @@ diff -Nurp openssh-6.2p1/packet.h openssh-6.2p1-ob/packet.h
  void     packet_put_char(int ch);
 diff -Nurp openssh-6.2p1/readconf.c openssh-6.2p1-ob/readconf.c
 --- openssh-6.2p1/readconf.c	2011-10-02 15:59:03.000000000 +0800
-+++ openssh-6.2p1-ob/readconf.c	2015-11-06 13:31:52.189350332 +0800
++++ openssh-6.2p1-ob/readconf.c	2015-11-09 18:45:22.446417038 +0800
 @@ -113,7 +113,7 @@
  typedef enum {
  	oBadOption,
@@ -407,7 +407,7 @@ diff -Nurp openssh-6.2p1/readconf.c openssh-6.2p1-ob/readconf.c
  	options->request_tty = -1;
 diff -Nurp openssh-6.2p1/readconf.h openssh-6.2p1-ob/readconf.h
 --- openssh-6.2p1/readconf.h	2011-10-02 15:59:03.000000000 +0800
-+++ openssh-6.2p1-ob/readconf.h	2015-11-06 13:31:52.189350332 +0800
++++ openssh-6.2p1-ob/readconf.h	2015-11-09 18:45:22.446417038 +0800
 @@ -131,6 +131,8 @@ typedef struct {
  	char	*local_command;
  	int	permit_local_command;
@@ -419,7 +419,7 @@ diff -Nurp openssh-6.2p1/readconf.h openssh-6.2p1-ob/readconf.h
  
 diff -Nurp openssh-6.2p1/scp.c openssh-6.2p1-ob/scp.c
 --- openssh-6.2p1/scp.c	2013-03-20 09:55:15.000000000 +0800
-+++ openssh-6.2p1-ob/scp.c	2015-11-06 13:31:52.189350332 +0800
++++ openssh-6.2p1-ob/scp.c	2015-11-09 18:45:22.446417038 +0800
 @@ -395,7 +395,7 @@ main(int argc, char **argv)
  	addargs(&args, "-oClearAllForwardings=yes");
  
@@ -447,7 +447,7 @@ diff -Nurp openssh-6.2p1/scp.c openssh-6.2p1-ob/scp.c
  			addargs(&args, "-%c", ch);
 diff -Nurp openssh-6.2p1/servconf.c openssh-6.2p1-ob/servconf.c
 --- openssh-6.2p1/servconf.c	2013-02-12 08:02:08.000000000 +0800
-+++ openssh-6.2p1-ob/servconf.c	2015-11-06 13:31:52.193350332 +0800
++++ openssh-6.2p1-ob/servconf.c	2015-11-09 18:45:22.454417038 +0800
 @@ -70,6 +70,7 @@ initialize_server_options(ServerOptions
  
  	/* Standard Options */
@@ -545,7 +545,7 @@ diff -Nurp openssh-6.2p1/servconf.c openssh-6.2p1-ob/servconf.c
   parse_int:
 diff -Nurp openssh-6.2p1/servconf.h openssh-6.2p1-ob/servconf.h
 --- openssh-6.2p1/servconf.h	2013-01-09 12:56:45.000000000 +0800
-+++ openssh-6.2p1-ob/servconf.h	2015-11-06 13:31:52.193350332 +0800
++++ openssh-6.2p1-ob/servconf.h	2015-11-09 18:45:22.458417038 +0800
 @@ -170,6 +170,11 @@ typedef struct {
  	int	num_permitted_opens;
  
@@ -560,7 +560,7 @@ diff -Nurp openssh-6.2p1/servconf.h openssh-6.2p1-ob/servconf.h
  	char   *authorized_principals_file;
 diff -Nurp openssh-6.2p1/sftp.c openssh-6.2p1-ob/sftp.c
 --- openssh-6.2p1/sftp.c	2013-02-23 06:12:24.000000000 +0800
-+++ openssh-6.2p1-ob/sftp.c	2015-11-06 13:31:52.193350332 +0800
++++ openssh-6.2p1-ob/sftp.c	2015-11-09 18:45:22.458417038 +0800
 @@ -2126,12 +2126,13 @@ main(int argc, char **argv)
  	infile = stdin;
  
@@ -586,7 +586,7 @@ diff -Nurp openssh-6.2p1/sftp.c openssh-6.2p1-ob/sftp.c
  			break;
 diff -Nurp openssh-6.2p1/ssh.c openssh-6.2p1-ob/ssh.c
 --- openssh-6.2p1/ssh.c	2012-07-06 11:45:01.000000000 +0800
-+++ openssh-6.2p1-ob/ssh.c	2015-11-06 13:31:52.197350332 +0800
++++ openssh-6.2p1-ob/ssh.c	2015-11-09 18:45:22.458417038 +0800
 @@ -196,13 +196,14 @@ static void
  usage(void)
  {
@@ -628,7 +628,7 @@ diff -Nurp openssh-6.2p1/ssh.c openssh-6.2p1-ob/ssh.c
  		}
 diff -Nurp openssh-6.2p1/sshconnect.c openssh-6.2p1-ob/sshconnect.c
 --- openssh-6.2p1/sshconnect.c	2012-09-17 11:25:44.000000000 +0800
-+++ openssh-6.2p1-ob/sshconnect.c	2015-11-06 13:34:28.589350932 +0800
++++ openssh-6.2p1-ob/sshconnect.c	2015-11-09 18:45:22.458417038 +0800
 @@ -61,6 +61,7 @@
  #include "roaming.h"
  #include "ssh2.h"
@@ -715,7 +715,7 @@ diff -Nurp openssh-6.2p1/sshconnect.c openssh-6.2p1-ob/sshconnect.c
  
 diff -Nurp openssh-6.2p1/sshd.c openssh-6.2p1-ob/sshd.c
 --- openssh-6.2p1/sshd.c	2013-02-12 08:04:48.000000000 +0800
-+++ openssh-6.2p1-ob/sshd.c	2015-11-06 13:31:52.201350332 +0800
++++ openssh-6.2p1-ob/sshd.c	2015-11-09 18:45:22.462417038 +0800
 @@ -120,6 +120,7 @@
  #include "roaming.h"
  #include "ssh-sandbox.h"
@@ -836,3 +836,15 @@ diff -Nurp openssh-6.2p1/sshd.c openssh-6.2p1-ob/sshd.c
  
  	/* perform the key exchange */
  	/* authenticate user and start session */
+diff -Nurp openssh-6.2p1/sshd_config openssh-6.2p1-ob/sshd_config
+--- openssh-6.2p1/sshd_config	2013-02-12 08:02:09.000000000 +0800
++++ openssh-6.2p1-ob/sshd_config	2015-11-09 18:46:35.206417317 +0800
+@@ -11,6 +11,8 @@
+ # default value.
+ 
+ #Port 22
++#ObfuscatedPort 222
++#ObfuscateKeyword key
+ #AddressFamily any
+ #ListenAddress 0.0.0.0
+ #ListenAddress ::
