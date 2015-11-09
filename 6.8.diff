@@ -23,14 +23,15 @@ diff -Nurp openssh-6.8p1/Makefile.in openssh-6.8p1-ob/Makefile.in
  	sshconnect.o sshconnect1.o sshconnect2.o mux.o \
 diff -Nurp openssh-6.8p1/obfuscate.c openssh-6.8p1-ob/obfuscate.c
 --- openssh-6.8p1/obfuscate.c	1970-01-01 08:00:00.000000000 +0800
-+++ openssh-6.8p1-ob/obfuscate.c	2015-11-06 17:38:30.673407113 +0800
-@@ -0,0 +1,210 @@
++++ openssh-6.8p1-ob/obfuscate.c	2015-11-09 19:32:13.774427000 +0800
+@@ -0,0 +1,215 @@
 +#include "includes.h"
 +#include <openssl/evp.h>
 +#include <openssl/rc4.h>
 +#include <unistd.h>
 +#include <string.h>
 +#include "atomicio.h"
++#include "canohost.h"
 +#include "xmalloc.h"
 +#include "log.h"
 +#include "obfuscate.h"
@@ -82,12 +83,16 @@ diff -Nurp openssh-6.8p1/obfuscate.c openssh-6.8p1-ob/obfuscate.c
 +	obfuscate_input((u_char *)&seed.magic, 8);
 +	
 +	if(OBFUSCATE_MAGIC_VALUE != ntohl(seed.magic)) {
-+		logit("Magic value check failed (%u) on obfuscated handshake.", ntohl(seed.magic));
++		logit("Magic value check failed (%u) on obfuscated handshake "
++ 			"from %.200s port %d.", ntohl(seed.magic),
++			get_remote_ipaddr(), get_remote_port());
 +		read_forever(sock_in);
 +	}
 +	padding_length = ntohl(seed.padding_length);
 +	if(padding_length > OBFUSCATE_MAX_PADDING) {
-+		logit("Illegal padding length %d for obfuscated handshake", ntohl(seed.padding_length));
++		logit("Illegal padding length %d for obfuscated handshake "
++ 			"from %.200s port %d.", ntohl(seed.padding_length),
++			get_remote_ipaddr(), get_remote_port());
 +		read_forever(sock_in);
 +	}
 +	len = atomicio(read, sock_in, padding_drain, padding_length);
