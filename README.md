@@ -2,7 +2,7 @@
 Patches for adding handshake obfuscation to OpenSSH
 
 
-##Not fully tested. 
+##Not fully tested.
 
 
 ### Acknowledgements

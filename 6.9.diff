@@ -64,11 +64,11 @@ diff -Nurp openssh-6.9p1/obfuscate.c openssh-6.9p1-ob/obfuscate.c
 +/*
 + * Server calls this
 + */
-+void 
++void
 +obfuscate_receive_seed(int sock_in)
 +{
 +	struct seed_msg seed;
-+	
++
 +	u_char padding_drain[OBFUSCATE_MAX_PADDING];
 +	u_int len;
 +	u_int32_t padding_length;
@@ -81,7 +81,7 @@ diff -Nurp openssh-6.9p1/obfuscate.c openssh-6.9p1-ob/obfuscate.c
 +
 +	initialize(seed.seed_buffer, 1);
 +	obfuscate_input((u_char *)&seed.magic, 8);
-+	
++
 +	if(OBFUSCATE_MAGIC_VALUE != ntohl(seed.magic)) {
 +		logit("Magic value check failed (%u) on obfuscated handshake "
 + 			"from %.200s port %d.", ntohl(seed.magic),
@@ -108,12 +108,12 @@ diff -Nurp openssh-6.9p1/obfuscate.c openssh-6.9p1-ob/obfuscate.c
 +void
 +obfuscate_send_seed(int sock_out)
 +{
-+	struct seed_msg *seed; 
++	struct seed_msg *seed;
 +	int i;
 +	u_int32_t rnd = 0;
 +	u_int message_length;
 +	u_int padding_length;
-+	
++
 +	padding_length = arc4random() % OBFUSCATE_MAX_PADDING;
 +	message_length = padding_length + sizeof(struct seed_msg);
 +	seed = xmalloc(message_length);
@@ -164,7 +164,7 @@ diff -Nurp openssh-6.9p1/obfuscate.c openssh-6.9p1-ob/obfuscate.c
 +{
 +	u_char client_to_server_key[OBFUSCATE_KEY_LENGTH];
 +	u_char server_to_client_key[OBFUSCATE_KEY_LENGTH];
-+	
++
 +	generate_key_pair(seed, client_to_server_key, server_to_client_key);
 +
 +	if(server)
@@ -218,7 +218,7 @@ diff -Nurp openssh-6.9p1/obfuscate.c openssh-6.9p1-ob/obfuscate.c
 +		EVP_DigestFinal(&ctx, md_output, &md_len);
 +	}
 +
-+	if(md_len < OBFUSCATE_KEY_LENGTH) 
++	if(md_len < OBFUSCATE_KEY_LENGTH)
 +		fatal("Cannot derive obfuscation keys from hash length of %d", md_len);
 +
 +	memcpy(key_data, md_output, OBFUSCATE_KEY_LENGTH);
