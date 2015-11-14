@@ -329,7 +329,7 @@ diff -Nurp openssh-7.0p1/packet.c openssh-7.0p1-ob/packet.c
  	if ((r = sshbuf_reserve(state->incoming_packet, aadlen + need,
  	    &cp)) != 0)
  		goto out;
-@@ -2925,3 +2939,18 @@ sshpkt_add_padding(struct ssh *ssh, u_ch
+@@ -2925,3 +2939,20 @@ sshpkt_add_padding(struct ssh *ssh, u_ch
  	ssh->state->extra_pad = pad;
  	return 0;
  }
@@ -344,9 +344,11 @@ diff -Nurp openssh-7.0p1/packet.c openssh-7.0p1-ob/packet.c
 +void
 +sshpkt_disable_obfuscation()
 +{
-+	if(active_state->state->obfuscation)
-+		debug("Obfuscation disabled");
-+	active_state->state->obfuscation = 0;
++	if(active_state != NULL) /* XXX - needed for passing test_kex */
++		if(active_state->state->obfuscation) {
++			debug("Obfuscation disabled");
++			active_state->state->obfuscation = 0;
++		}
 +}
 diff -Nurp openssh-7.0p1/packet.h openssh-7.0p1-ob/packet.h
 --- openssh-7.0p1/packet.h	2015-08-11 16:57:29.000000000 +0800
