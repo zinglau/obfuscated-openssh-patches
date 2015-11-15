@@ -85,14 +85,14 @@ diff -Nurp openssh-6.7p1/obfuscate.c openssh-6.7p1-ob/obfuscate.c
 +
 +	if(OBFUSCATE_MAGIC_VALUE != ntohl(seed.magic)) {
 +		logit("Magic value check failed (%u) on obfuscated handshake "
-+ 			"from %.200s port %d.", ntohl(seed.magic),
++ 			"from %.200s port %d", ntohl(seed.magic),
 +			get_remote_ipaddr(), get_remote_port());
 +		read_forever(sock_in);
 +	}
 +	padding_length = ntohl(seed.padding_length);
 +	if(padding_length > OBFUSCATE_MAX_PADDING) {
 +		logit("Illegal padding length %d for obfuscated handshake "
-+ 			"from %.200s port %d.", ntohl(seed.padding_length),
++ 			"from %.200s port %d", ntohl(seed.padding_length),
 +			get_remote_ipaddr(), get_remote_port());
 +		read_forever(sock_in);
 +	}
