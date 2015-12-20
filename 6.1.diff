@@ -386,7 +386,7 @@ diff -Nurp openssh-6.1p1/readconf.c openssh-6.1p1-ob/readconf.c
  	{ "kexalgorithms", oKexAlgorithms },
  	{ "ipqos", oIPQoS },
  	{ "requesttty", oRequestTTY },
-@@ -1044,6 +1046,15 @@ parse_int:
+@@ -1044,6 +1046,16 @@ parse_int:
  			*intptr = value;
  		break;
  
@@ -395,7 +395,8 @@ diff -Nurp openssh-6.1p1/readconf.c openssh-6.1p1-ob/readconf.c
 +		goto parse_flag;
 +
 +	case oObfuscateKeyword:
-+		options->obfuscate_handshake = 1;
++		if (*activep)
++			options->obfuscate_handshake = 1;
 +		charptr = &options->obfuscate_keyword;
 +		goto parse_string;
 +
