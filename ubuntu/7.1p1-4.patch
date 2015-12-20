@@ -1,35 +1,34 @@
 Description: Add handshake obfuscation
 Author: zinglau <zinglau@gmail.com>
-Index: openssh-6.7p1/Makefile.in
+Index: openssh-7.1p1/Makefile.in
 ===================================================================
---- openssh-6.7p1.orig/Makefile.in	2015-11-13 22:37:33.000000000 +0800
-+++ openssh-6.7p1/Makefile.in	2015-11-13 22:56:04.144306753 +0800
-@@ -86,7 +86,7 @@
- 	msg.o progressmeter.o dns.o entropy.o gss-genr.o umac.o umac128.o \
- 	ssh-pkcs11.o krl.o smult_curve25519_ref.o \
- 	kexc25519.o kexc25519c.o poly1305.o chacha.o cipher-chachapoly.o \
--	ssh-ed25519.o digest-openssl.o hmac.o \
-+	ssh-ed25519.o digest-openssl.o hmac.o obfuscate.o \
- 	sc25519.o ge25519.o fe25519.o ed25519.o verify.o hash.o blocks.o
+--- openssh-7.1p1.orig/Makefile.in	2015-12-21 05:02:36.000000000 +0800
++++ openssh-7.1p1/Makefile.in	2015-12-21 05:16:59.251386208 +0800
+@@ -92,7 +92,7 @@
+ 	kex.o kexdh.o kexgex.o kexecdh.o kexc25519.o \
+ 	kexdhc.o kexgexc.o kexecdhc.o kexc25519c.o \
+ 	kexdhs.o kexgexs.o kexecdhs.o kexc25519s.o \
+-	kexgssc.o
++	kexgssc.o obfuscate.o
  
  SSHOBJS= ssh.o readconf.o clientloop.o sshtty.o \
-Index: openssh-6.7p1/kex.c
+ 	sshconnect.o sshconnect1.o sshconnect2.o mux.o \
+Index: openssh-7.1p1/kex.c
 ===================================================================
---- openssh-6.7p1.orig/kex.c	2015-11-13 22:37:33.000000000 +0800
-+++ openssh-6.7p1/kex.c	2015-11-13 22:56:04.140306753 +0800
-@@ -261,6 +261,8 @@
+--- openssh-7.1p1.orig/kex.c	2015-12-21 05:02:36.000000000 +0800
++++ openssh-7.1p1/kex.c	2015-12-21 05:15:35.223389252 +0800
+@@ -362,6 +362,7 @@
  	kex->flags &= ~KEX_INIT_SENT;
  	free(kex->name);
  	kex->name = NULL;
-+
-+	packet_disable_obfuscation();
++	sshpkt_disable_obfuscation();
+ 	return 0;
  }
  
- void
-Index: openssh-6.7p1/obfuscate.c
+Index: openssh-7.1p1/obfuscate.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ openssh-6.7p1/obfuscate.c	2015-11-13 22:56:04.144306753 +0800
++++ openssh-7.1p1/obfuscate.c	2015-12-21 05:15:35.227389252 +0800
 @@ -0,0 +1,215 @@
 +#include "includes.h"
 +#include <openssl/evp.h>
@@ -246,10 +245,10 @@ Index: openssh-6.7p1/obfuscate.c
 +		;
 +	cleanup_exit(255);
 +}
-Index: openssh-6.7p1/obfuscate.h
+Index: openssh-7.1p1/obfuscate.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ openssh-6.7p1/obfuscate.h	2015-11-13 22:56:04.144306753 +0800
++++ openssh-7.1p1/obfuscate.h	2015-12-21 05:15:35.227389252 +0800
 @@ -0,0 +1,10 @@
 +#ifndef _OBFUSCATE_H
 +#define _OBFUSCATE_H
@@ -261,19 +260,19 @@ Index: openssh-6.7p1/obfuscate.h
 +void obfuscate_output(u_char *, u_int);
 +
 +#endif
-Index: openssh-6.7p1/packet.c
+Index: openssh-7.1p1/packet.c
 ===================================================================
---- openssh-6.7p1.orig/packet.c	2014-07-18 12:11:26.000000000 +0800
-+++ openssh-6.7p1/packet.c	2015-11-13 22:56:04.148306753 +0800
-@@ -80,6 +80,7 @@
+--- openssh-7.1p1.orig/packet.c	2015-08-21 12:49:03.000000000 +0800
++++ openssh-7.1p1/packet.c	2015-12-21 05:15:35.227389252 +0800
+@@ -84,6 +84,7 @@
  #include "ssh.h"
- #include "ssherr.h"
+ #include "packet.h"
  #include "roaming.h"
 +#include "obfuscate.h"
+ #include "ssherr.h"
+ #include "sshbuf.h"
  
- #ifdef PACKET_DEBUG
- #define DBG(x) x
-@@ -158,6 +159,8 @@
+@@ -171,6 +172,8 @@
  	/* Set to true if we are authenticated. */
  	int after_authentication;
  
@@ -282,102 +281,100 @@ Index: openssh-6.7p1/packet.c
  	int keep_alive_timeouts;
  
  	/* The maximum time that we will wait to send or receive a packet */
-@@ -574,6 +577,9 @@
- 	    (r = cipher_init(&active_state->receive_context, cipher,
- 	    key, keylen, NULL, 0, CIPHER_DECRYPT)) != 0)
- 		fatal("%s: cipher_init: %s", __func__, ssh_err(r));
-+
-+	if(active_state->obfuscation)
-+		packet_disable_obfuscation();
+@@ -819,6 +822,8 @@
+ 		error("Warning: %s", wmsg);
+ 		state->cipher_warning_done = 1;
+ 	}
++	if(state->obfuscation)
++		sshpkt_disable_obfuscation();
+ #endif /* WITH_SSH1 */
  }
  
- u_int
-@@ -728,7 +734,8 @@
- 	    buffer_ptr(&active_state->outgoing_packet),
- 	    buffer_len(&active_state->outgoing_packet), 0, 0) != 0)
- 		fatal("%s: cipher_crypt failed", __func__);
+@@ -895,7 +900,8 @@
+ 	    sshbuf_ptr(state->outgoing_packet),
+ 	    sshbuf_len(state->outgoing_packet), 0, 0)) != 0)
+ 		goto out;
 -
-+	if(active_state->obfuscation)
-+		obfuscate_output(cp, buffer_len(&active_state->outgoing_packet));
++	if(state->obfuscation)
++		obfuscate_output(cp, sshbuf_len(state->outgoing_packet));
  #ifdef PACKET_DEBUG
  	fprintf(stderr, "encrypted: ");
- 	buffer_dump(&active_state->output);
-@@ -974,6 +981,8 @@
- 		}
- 		buffer_append(&active_state->output, macbuf, mac->mac_len);
+ 	sshbuf_dump(state->output, stderr);
+@@ -1176,6 +1182,8 @@
+ 		if ((r = sshbuf_put(state->output, macbuf, mac->mac_len)) != 0)
+ 			goto out;
  	}
-+	if(active_state->obfuscation)
-+		obfuscate_output(cp, buffer_len(&active_state->outgoing_packet));
++	if(state->obfuscation)
++		obfuscate_output(cp, sshbuf_len(state->outgoing_packet));
  #ifdef PACKET_DEBUG
  	fprintf(stderr, "encrypted: ");
- 	buffer_dump(&active_state->output);
-@@ -1198,6 +1207,8 @@
- 		return SSH_MSG_NONE;
+ 	sshbuf_dump(state->output, stderr);
+@@ -1432,6 +1440,8 @@
+ 		return 0;
  
  	/* The entire packet is in buffer. */
-+	if(active_state->obfuscation)
-+		obfuscate_input(buffer_ptr(&active_state->input), padded_len);
++	if(state->obfuscation)
++		obfuscate_input(buffer_ptr(state->input), padded_len);
  
  	/* Consume packet length. */
- 	buffer_consume(&active_state->input, 4);
-@@ -1319,6 +1330,8 @@
- 		buffer_clear(&active_state->incoming_packet);
- 		cp = buffer_append_space(&active_state->incoming_packet,
- 		    block_size);
-+		if(active_state->obfuscation)
-+			obfuscate_input(buffer_ptr(&active_state->input), block_size);
- 		if (cipher_crypt(&active_state->receive_context,
- 		    active_state->p_read.seqnr, cp,
- 		    buffer_ptr(&active_state->input), block_size, 0, 0) != 0)
-@@ -1375,6 +1388,8 @@
- 	if (mac && mac->enabled && mac->etm)
- 		macbuf = mac_compute(mac, active_state->p_read.seqnr,
- 		    buffer_ptr(&active_state->input), aadlen + need);
-+	if(active_state->obfuscation)
-+		obfuscate_input(buffer_ptr(&active_state->input), need);
- 	cp = buffer_append_space(&active_state->incoming_packet, aadlen + need);
- 	if (cipher_crypt(&active_state->receive_context,
- 	    active_state->p_read.seqnr, cp,
-@@ -2005,6 +2020,21 @@
- 	active_state->after_authentication = 1;
+ 	if ((r = sshbuf_consume(state->input, 4)) != 0)
+@@ -1594,6 +1604,8 @@
+ 		if ((r = sshbuf_reserve(state->incoming_packet, block_size,
+ 		    &cp)) != 0)
+ 			goto out;
++		if(state->obfuscation)
++			obfuscate_input(buffer_ptr(state->input), block_size);
+ 		if ((r = cipher_crypt(&state->receive_context,
+ 		    state->p_send.seqnr, cp, sshbuf_ptr(state->input),
+ 		    block_size, 0, 0)) != 0)
+@@ -1655,6 +1667,8 @@
+ 		    macbuf, sizeof(macbuf))) != 0)
+ 			goto out;
+ 	}
++	if(state->obfuscation)
++		obfuscate_input(buffer_ptr(state->input), need);
+ 	if ((r = sshbuf_reserve(state->incoming_packet, aadlen + need,
+ 	    &cp)) != 0)
+ 		goto out;
+@@ -2925,3 +2939,20 @@
+ 	ssh->state->extra_pad = pad;
+ 	return 0;
  }
- 
++
 +void
-+packet_enable_obfuscation(void)
++sshpkt_enable_obfuscation()
 +{
 +	debug("Obfuscation enabled");
-+	active_state->obfuscation = 1;
++	active_state->state->obfuscation = 1;
 +}
 +
 +void
-+packet_disable_obfuscation(void)
++sshpkt_disable_obfuscation()
 +{
-+	if(active_state->obfuscation)
-+		debug("Obfuscation disabled");
-+	active_state->obfuscation = 0;
++	if(active_state != NULL) /* XXX - needed for passing test_kex */
++		if(active_state->state->obfuscation) {
++			debug("Obfuscation disabled");
++			active_state->state->obfuscation = 0;
++		}
 +}
-+
- void *
- packet_get_input(void)
- {
-Index: openssh-6.7p1/packet.h
+Index: openssh-7.1p1/packet.h
 ===================================================================
---- openssh-6.7p1.orig/packet.h	2014-05-15 12:37:39.000000000 +0800
-+++ openssh-6.7p1/packet.h	2015-11-13 22:56:04.152306752 +0800
-@@ -38,6 +38,8 @@
- int      packet_is_interactive(void);
- void     packet_set_server(void);
- void     packet_set_authenticated(void);
-+void     packet_enable_obfuscation(void);
-+void     packet_disable_obfuscation(void);
+--- openssh-7.1p1.orig/packet.h	2015-08-21 12:49:03.000000000 +0800
++++ openssh-7.1p1/packet.h	2015-12-21 05:15:35.227389252 +0800
+@@ -162,6 +162,8 @@
+ 	    __attribute__((format(printf, 2, 3)));
+ int	sshpkt_add_padding(struct ssh *, u_char);
+ void	sshpkt_fatal(struct ssh *ssh, const char *tag, int r);
++void	sshpkt_enable_obfuscation(void);
++void	sshpkt_disable_obfuscation(void);
  
- void     packet_start(u_char);
- void     packet_put_char(int ch);
-Index: openssh-6.7p1/readconf.c
+ int	sshpkt_put(struct ssh *ssh, const void *v, size_t len);
+ int	sshpkt_putb(struct ssh *ssh, const struct sshbuf *b);
+Index: openssh-7.1p1/readconf.c
 ===================================================================
---- openssh-6.7p1.orig/readconf.c	2015-11-13 22:37:33.000000000 +0800
-+++ openssh-6.7p1/readconf.c	2015-11-13 22:56:04.156306752 +0800
-@@ -128,7 +128,7 @@
+--- openssh-7.1p1.orig/readconf.c	2015-12-21 05:02:36.000000000 +0800
++++ openssh-7.1p1/readconf.c	2015-12-21 05:15:35.227389252 +0800
+@@ -133,7 +133,7 @@
  	oBadOption,
  	oHost, oMatch,
  	oForwardAgent, oForwardX11, oForwardX11Trusted, oForwardX11Timeout,
@@ -386,7 +383,7 @@ Index: openssh-6.7p1/readconf.c
  	oPasswordAuthentication, oRSAAuthentication,
  	oChallengeResponseAuthentication, oXAuthLocation,
  	oIdentityFile, oHostName, oPort, oCipher, oRemoteForward, oLocalForward,
-@@ -269,6 +269,8 @@
+@@ -276,6 +276,8 @@
  	{ "permitlocalcommand", oPermitLocalCommand },
  	{ "visualhostkey", oVisualHostKey },
  	{ "useroaming", oUseRoaming },
@@ -395,9 +392,9 @@ Index: openssh-6.7p1/readconf.c
  	{ "kexalgorithms", oKexAlgorithms },
  	{ "ipqos", oIPQoS },
  	{ "requesttty", oRequestTTY },
-@@ -1472,6 +1474,16 @@
- 		intptr = &options->fwd_opts.streamlocal_bind_unlink;
- 		goto parse_flag;
+@@ -1535,6 +1537,16 @@
+ 		charptr = &options->pubkey_key_types;
+ 		goto parse_keytypes;
  
 +	case oObfuscateHandshake:
 +		intptr = &options->obfuscate_handshake;
@@ -412,7 +409,7 @@ Index: openssh-6.7p1/readconf.c
  	case oDeprecated:
  		debug("%s line %d: Deprecated option \"%s\"",
  		    filename, linenum, keyword);
-@@ -1642,6 +1653,8 @@
+@@ -1705,6 +1717,8 @@
  	options->permit_local_command = -1;
  	options->use_roaming = -1;
  	options->visual_host_key = -1;
@@ -421,10 +418,10 @@ Index: openssh-6.7p1/readconf.c
  	options->ip_qos_interactive = -1;
  	options->ip_qos_bulk = -1;
  	options->request_tty = -1;
-Index: openssh-6.7p1/readconf.h
+Index: openssh-7.1p1/readconf.h
 ===================================================================
---- openssh-6.7p1.orig/readconf.h	2015-11-13 22:37:33.000000000 +0800
-+++ openssh-6.7p1/readconf.h	2015-11-13 22:56:04.156306752 +0800
+--- openssh-7.1p1.orig/readconf.h	2015-12-21 05:02:36.000000000 +0800
++++ openssh-7.1p1/readconf.h	2015-12-21 05:15:35.227389252 +0800
 @@ -134,6 +134,8 @@
  	char	*local_command;
  	int	permit_local_command;
@@ -434,11 +431,11 @@ Index: openssh-6.7p1/readconf.h
  
  	int	use_roaming;
  
-Index: openssh-6.7p1/scp.c
+Index: openssh-7.1p1/scp.c
 ===================================================================
---- openssh-6.7p1.orig/scp.c	2015-11-13 22:37:33.000000000 +0800
-+++ openssh-6.7p1/scp.c	2015-11-13 22:56:04.156306752 +0800
-@@ -403,7 +403,7 @@
+--- openssh-7.1p1.orig/scp.c	2015-12-21 05:02:36.000000000 +0800
++++ openssh-7.1p1/scp.c	2015-12-21 05:15:35.227389252 +0800
+@@ -404,7 +404,7 @@
  	addargs(&args, "-oClearAllForwardings=yes");
  
  	fflag = tflag = 0;
@@ -447,7 +444,7 @@ Index: openssh-6.7p1/scp.c
  		switch (ch) {
  		/* User-visible flags. */
  		case '1':
-@@ -411,6 +411,7 @@
+@@ -412,6 +412,7 @@
  		case '4':
  		case '6':
  		case 'C':
@@ -455,7 +452,7 @@ Index: openssh-6.7p1/scp.c
  			addargs(&args, "-%c", ch);
  			addargs(&remote_remote_args, "-%c", ch);
  			break;
-@@ -421,6 +422,7 @@
+@@ -422,6 +423,7 @@
  		case 'c':
  		case 'i':
  		case 'F':
@@ -463,19 +460,19 @@ Index: openssh-6.7p1/scp.c
  			addargs(&remote_remote_args, "-%c", ch);
  			addargs(&remote_remote_args, "%s", optarg);
  			addargs(&args, "-%c", ch);
-Index: openssh-6.7p1/servconf.c
+Index: openssh-7.1p1/servconf.c
 ===================================================================
---- openssh-6.7p1.orig/servconf.c	2015-11-13 22:37:33.000000000 +0800
-+++ openssh-6.7p1/servconf.c	2015-11-13 22:56:04.156306752 +0800
-@@ -74,6 +74,7 @@
+--- openssh-7.1p1.orig/servconf.c	2015-12-21 05:02:36.000000000 +0800
++++ openssh-7.1p1/servconf.c	2015-12-21 05:15:35.231389252 +0800
+@@ -77,6 +77,7 @@
  
  	/* Standard Options */
  	options->num_ports = 0;
 +	options->num_obfuscated_ports = 0;
  	options->ports_from_cmdline = 0;
- 	options->listen_addrs = NULL;
- 	options->address_family = -1;
-@@ -152,6 +153,7 @@
+ 	options->queued_listen_addrs = NULL;
+ 	options->num_queued_listens = 0;
+@@ -160,6 +161,7 @@
  	options->num_permitted_opens = -1;
  	options->adm_forced_command = NULL;
  	options->chroot_directory = NULL;
@@ -483,27 +480,29 @@ Index: openssh-6.7p1/servconf.c
  	options->authorized_keys_command = NULL;
  	options->authorized_keys_command_user = NULL;
  	options->revoked_keys_file = NULL;
-@@ -192,7 +194,7 @@
+@@ -212,7 +214,7 @@
  		}
  	}
  	/* No certificates by default */
 -	if (options->num_ports == 0)
 +	if (options->num_ports == 0 && options->num_obfuscated_ports == 0)
  		options->ports[options->num_ports++] = SSH_DEFAULT_PORT;
- 	if (options->listen_addrs == NULL)
- 		add_listen_addr(options, NULL, 0);
-@@ -345,8 +347,8 @@
+ 	if (options->address_family == -1)
+ 		options->address_family = AF_UNSPEC;
+@@ -400,9 +402,9 @@
  	/* Portable-specific options */
  	sUsePAM,
  	/* Standard Options */
--	sPort, sHostKeyFile, sServerKeyBits, sLoginGraceTime, sKeyRegenerationTime,
--	sPermitRootLogin, sLogFacility, sLogLevel,
+-	sPort, sHostKeyFile, sServerKeyBits, sLoginGraceTime,
+-	sKeyRegenerationTime, sPermitRootLogin, sLogFacility, sLogLevel,
+-	sRhostsRSAAuthentication, sRSAAuthentication,
 +	sPort, sObfuscatedPort, sObfuscateKeyword, sHostKeyFile, sServerKeyBits,
-+	sLoginGraceTime, sKeyRegenerationTime, sPermitRootLogin, sLogFacility, sLogLevel,
- 	sRhostsRSAAuthentication, sRSAAuthentication,
++	sLoginGraceTime, sKeyRegenerationTime, sPermitRootLogin, sLogFacility,
++	sLogLevel, sRhostsRSAAuthentication, sRSAAuthentication,
  	sKerberosAuthentication, sKerberosOrLocalPasswd, sKerberosTicketCleanup,
  	sKerberosGetAFSToken,
-@@ -399,6 +401,8 @@
+ 	sKerberosTgtPassing, sChallengeResponseAuthentication,
+@@ -456,6 +458,8 @@
  	{ "pamauthenticationviakbdint", sDeprecated, SSHCFG_GLOBAL },
  	/* Standard Options */
  	{ "port", sPort, SSHCFG_GLOBAL },
@@ -512,15 +511,10 @@ Index: openssh-6.7p1/servconf.c
  	{ "hostkey", sHostKeyFile, SSHCFG_GLOBAL },
  	{ "hostdsakey", sHostKeyFile, SSHCFG_GLOBAL },		/* alias */
  	{ "hostkeyagent", sHostKeyAgent, SSHCFG_GLOBAL },
-@@ -574,13 +578,16 @@
+@@ -639,9 +643,12 @@
  {
  	u_int i;
  
--	if (options->num_ports == 0)
-+	if (options->num_ports == 0 && options->num_obfuscated_ports == 0)
- 		options->ports[options->num_ports++] = SSH_DEFAULT_PORT;
- 	if (options->address_family == -1)
- 		options->address_family = AF_UNSPEC;
 -	if (port == 0)
 +	if (port == 0) {
  		for (i = 0; i < options->num_ports; i++)
@@ -531,7 +525,16 @@ Index: openssh-6.7p1/servconf.c
  	else
  		add_one_listen_addr(options, addr, port);
  }
-@@ -939,6 +946,30 @@
+@@ -695,7 +702,7 @@
+ {
+ 	u_int i;
+ 
+-	if (options->num_ports == 0)
++	if (options->num_ports == 0 && options->num_obfuscated_ports == 0)
+ 		options->ports[options->num_ports++] = SSH_DEFAULT_PORT;
+ 	if (options->address_family == -1)
+ 		options->address_family = AF_UNSPEC;
+@@ -1041,6 +1048,30 @@
  			    filename, linenum);
  		break;
  
@@ -562,11 +565,11 @@ Index: openssh-6.7p1/servconf.c
  	case sServerKeyBits:
  		intptr = &options->server_key_bits;
   parse_int:
-Index: openssh-6.7p1/servconf.h
+Index: openssh-7.1p1/servconf.h
 ===================================================================
---- openssh-6.7p1.orig/servconf.h	2015-11-13 22:37:33.000000000 +0800
-+++ openssh-6.7p1/servconf.h	2015-11-13 22:56:04.164306752 +0800
-@@ -175,6 +175,11 @@
+--- openssh-7.1p1.orig/servconf.h	2015-12-21 05:02:36.000000000 +0800
++++ openssh-7.1p1/servconf.h	2015-12-21 05:15:35.231389252 +0800
+@@ -180,6 +180,11 @@
  	int	num_permitted_opens;
  
  	char   *chroot_directory;
@@ -577,12 +580,12 @@ Index: openssh-6.7p1/servconf.h
 +
  	char   *revoked_keys_file;
  	char   *trusted_user_ca_keys;
- 	char   *authorized_principals_file;
-Index: openssh-6.7p1/sftp.c
+ 	char   *authorized_keys_command;
+Index: openssh-7.1p1/sftp.c
 ===================================================================
---- openssh-6.7p1.orig/sftp.c	2014-07-09 11:07:06.000000000 +0800
-+++ openssh-6.7p1/sftp.c	2015-11-13 22:56:04.164306752 +0800
-@@ -2259,12 +2259,13 @@
+--- openssh-7.1p1.orig/sftp.c	2015-08-21 12:49:03.000000000 +0800
++++ openssh-7.1p1/sftp.c	2015-12-21 05:15:35.231389252 +0800
+@@ -2265,12 +2265,13 @@
  	infile = stdin;
  
  	while ((ch = getopt(argc, argv,
@@ -597,7 +600,7 @@ Index: openssh-6.7p1/sftp.c
  			addargs(&args, "-%c", ch);
  			break;
  		/* Passed through to ssh(1) with argument */
-@@ -2272,6 +2273,7 @@
+@@ -2278,6 +2279,7 @@
  		case 'c':
  		case 'i':
  		case 'o':
@@ -605,38 +608,38 @@ Index: openssh-6.7p1/sftp.c
  			addargs(&args, "-%c", ch);
  			addargs(&args, "%s", optarg);
  			break;
-Index: openssh-6.7p1/ssh.c
+Index: openssh-7.1p1/ssh.c
 ===================================================================
---- openssh-6.7p1.orig/ssh.c	2015-11-13 22:37:33.000000000 +0800
-+++ openssh-6.7p1/ssh.c	2015-11-13 22:56:04.164306752 +0800
-@@ -199,14 +199,15 @@
+--- openssh-7.1p1.orig/ssh.c	2015-12-21 05:02:36.000000000 +0800
++++ openssh-7.1p1/ssh.c	2015-12-21 05:15:35.231389252 +0800
+@@ -201,14 +201,15 @@
  usage(void)
  {
  	fprintf(stderr,
--"usage: ssh [-1246AaCfgKkMNnqsTtVvXxYy] [-b bind_address] [-c cipher_spec]\n"
-+"usage: ssh [-1246AaCfgKkMNnqsTtVvXxYyz] [-b bind_address] [-c cipher_spec]\n"
+-"usage: ssh [-1246AaCfGgKkMNnqsTtVvXxYy] [-b bind_address] [-c cipher_spec]\n"
++"usage: ssh [-1246AaCfGgKkMNnqsTtVvXxYyz] [-b bind_address] [-c cipher_spec]\n"
  "           [-D [bind_address:]port] [-E log_file] [-e escape_char]\n"
  "           [-F configfile] [-I pkcs11] [-i identity_file]\n"
- "           [-L [bind_address:]port:host:hostport] [-l login_name] [-m mac_spec]\n"
+ "           [-L address] [-l login_name] [-m mac_spec]\n"
  "           [-O ctl_cmd] [-o option] [-p port]\n"
  "           [-Q cipher | cipher-auth | mac | kex | key]\n"
- "           [-R [bind_address:]port:host:hostport] [-S ctl_path] [-W host:port]\n"
+ "           [-R address] [-S ctl_path] [-W host:port]\n"
 -"           [-w local_tun[:remote_tun]] [user@]hostname [command]\n"
 +"           [-w local_tun[:remote_tun]] [-Z obfuscate_keyword]\n"
 +"           [user@]hostname [command]\n"
  	);
  	exit(255);
  }
-@@ -507,7 +508,7 @@
+@@ -596,7 +597,7 @@
  
   again:
  	while ((opt = getopt(ac, av, "1246ab:c:e:fgi:kl:m:no:p:qstvx"
--	    "ACD:E:F:I:KL:MNO:PQ:R:S:TVw:W:XYy")) != -1) {
-+	    "ACD:E:F:I:KL:MNO:PQ:R:S:TVw:W:XYyzZ:")) != -1) {
+-	    "ACD:E:F:GI:KL:MNO:PQ:R:S:TVw:W:XYy")) != -1) {
++	    "ACD:E:F:GI:KL:MNO:PQ:R:S:TVw:W:XYyzZ:")) != -1) {
  		switch (opt) {
  		case '1':
  			options.protocol = SSH_PROTO_1;
-@@ -808,6 +809,13 @@
+@@ -907,6 +908,13 @@
  		case 'F':
  			config = optarg;
  			break;
@@ -650,45 +653,45 @@ Index: openssh-6.7p1/ssh.c
  		default:
  			usage();
  		}
-Index: openssh-6.7p1/sshconnect.c
+Index: openssh-7.1p1/sshconnect.c
 ===================================================================
---- openssh-6.7p1.orig/sshconnect.c	2015-11-13 22:37:33.000000000 +0800
-+++ openssh-6.7p1/sshconnect.c	2015-11-13 22:59:54.988298389 +0800
-@@ -62,6 +62,7 @@
+--- openssh-7.1p1.orig/sshconnect.c	2015-12-21 05:02:36.000000000 +0800
++++ openssh-7.1p1/sshconnect.c	2015-12-21 05:20:35.091378389 +0800
+@@ -63,6 +63,7 @@
  #include "monitor_fdpass.h"
  #include "ssh2.h"
  #include "version.h"
 +#include "obfuscate.h"
+ #include "authfile.h"
+ #include "ssherr.h"
  
- char *client_version_string = NULL;
- char *server_version_string = NULL;
-@@ -248,6 +249,12 @@
+@@ -251,6 +252,12 @@
  	/* Set the connection file descriptors. */
  	packet_set_connection(pout[0], pin[1]);
  
 +	if(options.obfuscate_handshake) {
 +   		if(options.obfuscate_keyword)
 +      			obfuscate_set_keyword(options.obfuscate_keyword);
-+		packet_enable_obfuscation();
++		sshpkt_enable_obfuscation();
 +	}
 +
  	/* Indicate OK return */
  	return 0;
  }
-@@ -494,6 +501,12 @@
+@@ -497,6 +504,12 @@
  	/* Set the connection. */
  	packet_set_connection(sock, sock);
  
 +	if(options.obfuscate_handshake) {
 +		if(options.obfuscate_keyword)
 +			obfuscate_set_keyword(options.obfuscate_keyword);
-+		packet_enable_obfuscation();
++		sshpkt_enable_obfuscation();
 +	}
 +
  	return 0;
  }
  
-@@ -518,17 +531,28 @@
+@@ -521,17 +534,28 @@
  static void
  send_client_banner(int connection_out, int minor1)
  {
@@ -720,7 +723,7 @@ Index: openssh-6.7p1/sshconnect.c
  	chop(client_version_string);
  	debug("Local version string %.100s", client_version_string);
  }
-@@ -594,6 +618,8 @@
+@@ -597,6 +621,8 @@
  			else if (len != 1)
  				fatal("ssh_exchange_identification: "
  				    "read: %.100s", strerror(errno));
@@ -729,7 +732,7 @@ Index: openssh-6.7p1/sshconnect.c
  			if (buf[i] == '\r') {
  				buf[i] = '\n';
  				buf[i + 1] = 0;
-@@ -1300,6 +1326,9 @@
+@@ -1348,6 +1374,9 @@
  	host = xstrdup(orighost);
  	lowercase(host);
  
@@ -739,18 +742,18 @@ Index: openssh-6.7p1/sshconnect.c
  	/* Exchange protocol version identification strings with the server. */
  	ssh_exchange_identification(timeout_ms);
  
-Index: openssh-6.7p1/sshd.c
+Index: openssh-7.1p1/sshd.c
 ===================================================================
---- openssh-6.7p1.orig/sshd.c	2015-11-13 22:37:33.000000000 +0800
-+++ openssh-6.7p1/sshd.c	2015-11-13 23:02:40.800292382 +0800
+--- openssh-7.1p1.orig/sshd.c	2015-12-21 05:02:36.000000000 +0800
++++ openssh-7.1p1/sshd.c	2015-12-21 05:24:46.739369272 +0800
 @@ -122,6 +122,7 @@
+ #endif
+ #include "monitor_wrap.h"
  #include "roaming.h"
++#include "obfuscate.h"
  #include "ssh-sandbox.h"
  #include "version.h"
-+#include "obfuscate.h"
- 
- #ifdef USE_SECURITY_SESSION_API
- #include <Security/AuthSession.h>
+ #include "ssherr.h"
 @@ -261,6 +262,9 @@
  /* message to be displayed after login */
  Buffer loginmsg;
@@ -811,15 +814,15 @@ Index: openssh-6.7p1/sshd.c
  		if (buf[i] == '\r') {
  			buf[i] = 0;
  			/* Kludge for F-Secure Macintosh < 1.0.2 */
-@@ -1405,6 +1421,7 @@
+@@ -1471,6 +1487,7 @@
  	int sock_in = -1, sock_out = -1, newsock = -1;
  	const char *remote_ip;
  	int remote_port;
 +	int local_port;
- 	char *line, *logfile = NULL;
+ 	char *fp, *line, *laddr, *logfile = NULL;
  	int config_s[2] = { -1 , -1 };
  	u_int n;
-@@ -2054,6 +2071,14 @@
+@@ -2138,6 +2155,14 @@
  	packet_set_connection(sock_in, sock_out);
  	packet_set_server();
  
@@ -834,37 +837,37 @@ Index: openssh-6.7p1/sshd.c
  	/* Set SO_KEEPALIVE if requested. */
  	if (options.tcp_keep_alive && packet_connection_is_on_socket() &&
  	    setsockopt(sock_in, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on)) < 0)
-@@ -2169,6 +2194,13 @@
+@@ -2254,6 +2279,13 @@
  	if (!debug_flag)
  		alarm(options.login_grace_time);
  
 +	if(use_obfuscation) {
 +		if(options.obfuscate_keyword)
 +			obfuscate_set_keyword(options.obfuscate_keyword);
-+		packet_enable_obfuscation();
++		sshpkt_enable_obfuscation();
 +		obfuscate_receive_seed(sock_in);
 +	}
 +
  	sshd_exchange_identification(sock_in, sock_out);
  
  	/* In inetd mode, generate ephemeral key only for proto 1 connections */
-@@ -2190,8 +2222,11 @@
+@@ -2275,8 +2307,11 @@
  	auth_debug_reset();
  
  	if (use_privsep) {
 -		if (privsep_preauth(authctxt) == 1)
 +		if (privsep_preauth(authctxt) == 1) {
 +			if(use_obfuscation)
-+				packet_disable_obfuscation();
++				sshpkt_disable_obfuscation();
  			goto authenticated;
 +		}
- 	} else if (compat20 && have_agent)
- 		auth_conn = ssh_get_authentication_connection();
- 
-Index: openssh-6.7p1/sshd_config
+ 	} else if (compat20 && have_agent) {
+ 		if ((r = ssh_get_authentication_socket(&auth_sock)) != 0) {
+ 			error("Unable to get agent socket: %s", ssh_err(r));
+Index: openssh-7.1p1/sshd_config
 ===================================================================
---- openssh-6.7p1.orig/sshd_config	2015-11-13 22:37:33.000000000 +0800
-+++ openssh-6.7p1/sshd_config	2015-11-13 22:56:04.172306752 +0800
+--- openssh-7.1p1.orig/sshd_config	2015-12-21 05:02:36.000000000 +0800
++++ openssh-7.1p1/sshd_config	2015-12-21 05:15:35.235389252 +0800
 @@ -11,6 +11,8 @@
  # default value.
  

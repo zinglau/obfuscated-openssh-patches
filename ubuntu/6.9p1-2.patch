@@ -2,8 +2,8 @@ Description: Add handshake obfuscation
 Author: zinglau <zinglau@gmail.com>
 Index: openssh-6.9p1/Makefile.in
 ===================================================================
---- openssh-6.9p1.orig/Makefile.in	2015-11-14 04:54:32.000000000 +0800
-+++ openssh-6.9p1/Makefile.in	2015-11-14 04:55:05.647526326 +0800
+--- openssh-6.9p1.orig/Makefile.in	2015-12-21 05:02:15.000000000 +0800
++++ openssh-6.9p1/Makefile.in	2015-12-21 05:10:08.651401084 +0800
 @@ -92,7 +92,7 @@
  	kex.o kexdh.o kexgex.o kexecdh.o kexc25519.o \
  	kexdhc.o kexgexc.o kexecdhc.o kexc25519c.o \
@@ -15,8 +15,8 @@ Index: openssh-6.9p1/Makefile.in
  	sshconnect.o sshconnect1.o sshconnect2.o mux.o \
 Index: openssh-6.9p1/kex.c
 ===================================================================
---- openssh-6.9p1.orig/kex.c	2015-11-14 04:54:32.000000000 +0800
-+++ openssh-6.9p1/kex.c	2015-11-14 04:55:05.647526326 +0800
+--- openssh-6.9p1.orig/kex.c	2015-12-21 05:02:15.000000000 +0800
++++ openssh-6.9p1/kex.c	2015-12-21 05:10:08.651401084 +0800
 @@ -300,6 +300,7 @@
  	kex->flags &= ~KEX_INIT_SENT;
  	free(kex->name);
@@ -28,7 +28,7 @@ Index: openssh-6.9p1/kex.c
 Index: openssh-6.9p1/obfuscate.c
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ openssh-6.9p1/obfuscate.c	2015-11-14 04:55:05.647526326 +0800
++++ openssh-6.9p1/obfuscate.c	2015-12-21 05:10:08.651401084 +0800
 @@ -0,0 +1,215 @@
 +#include "includes.h"
 +#include <openssl/evp.h>
@@ -248,7 +248,7 @@ Index: openssh-6.9p1/obfuscate.c
 Index: openssh-6.9p1/obfuscate.h
 ===================================================================
 --- /dev/null	1970-01-01 00:00:00.000000000 +0000
-+++ openssh-6.9p1/obfuscate.h	2015-11-14 04:55:05.647526326 +0800
++++ openssh-6.9p1/obfuscate.h	2015-12-21 05:10:08.651401084 +0800
 @@ -0,0 +1,10 @@
 +#ifndef _OBFUSCATE_H
 +#define _OBFUSCATE_H
@@ -263,7 +263,7 @@ Index: openssh-6.9p1/obfuscate.h
 Index: openssh-6.9p1/packet.c
 ===================================================================
 --- openssh-6.9p1.orig/packet.c	2015-07-01 10:35:31.000000000 +0800
-+++ openssh-6.9p1/packet.c	2015-11-14 04:55:05.647526326 +0800
++++ openssh-6.9p1/packet.c	2015-12-21 05:10:08.655401084 +0800
 @@ -84,6 +84,7 @@
  #include "ssh.h"
  #include "packet.h"
@@ -360,7 +360,7 @@ Index: openssh-6.9p1/packet.c
 Index: openssh-6.9p1/packet.h
 ===================================================================
 --- openssh-6.9p1.orig/packet.h	2015-07-01 10:35:31.000000000 +0800
-+++ openssh-6.9p1/packet.h	2015-11-14 04:55:05.647526326 +0800
++++ openssh-6.9p1/packet.h	2015-12-21 05:10:08.655401084 +0800
 @@ -162,6 +162,8 @@
  	    __attribute__((format(printf, 2, 3)));
  int	sshpkt_add_padding(struct ssh *, u_char);
@@ -372,8 +372,8 @@ Index: openssh-6.9p1/packet.h
  int	sshpkt_putb(struct ssh *ssh, const struct sshbuf *b);
 Index: openssh-6.9p1/readconf.c
 ===================================================================
---- openssh-6.9p1.orig/readconf.c	2015-11-14 04:54:32.000000000 +0800
-+++ openssh-6.9p1/readconf.c	2015-11-14 04:55:05.651526326 +0800
+--- openssh-6.9p1.orig/readconf.c	2015-12-21 05:02:15.000000000 +0800
++++ openssh-6.9p1/readconf.c	2015-12-21 05:10:08.655401084 +0800
 @@ -133,7 +133,7 @@
  	oBadOption,
  	oHost, oMatch,
@@ -392,7 +392,7 @@ Index: openssh-6.9p1/readconf.c
  	{ "kexalgorithms", oKexAlgorithms },
  	{ "ipqos", oIPQoS },
  	{ "requesttty", oRequestTTY },
-@@ -1535,6 +1537,15 @@
+@@ -1535,6 +1537,16 @@
  			*charptr = xstrdup(arg);
  		break;
  
@@ -401,14 +401,15 @@ Index: openssh-6.9p1/readconf.c
 +		goto parse_flag;
 +
 +	case oObfuscateKeyword:
-+		options->obfuscate_handshake = 1;
++		if (*activep)
++			options->obfuscate_handshake = 1;
 +		charptr = &options->obfuscate_keyword;
 +		goto parse_string;
 +
  	case oDeprecated:
  		debug("%s line %d: Deprecated option \"%s\"",
  		    filename, linenum, keyword);
-@@ -1705,6 +1716,8 @@
+@@ -1705,6 +1717,8 @@
  	options->permit_local_command = -1;
  	options->use_roaming = -1;
  	options->visual_host_key = -1;
@@ -419,8 +420,8 @@ Index: openssh-6.9p1/readconf.c
  	options->request_tty = -1;
 Index: openssh-6.9p1/readconf.h
 ===================================================================
---- openssh-6.9p1.orig/readconf.h	2015-11-14 04:54:32.000000000 +0800
-+++ openssh-6.9p1/readconf.h	2015-11-14 04:55:05.651526326 +0800
+--- openssh-6.9p1.orig/readconf.h	2015-12-21 05:02:15.000000000 +0800
++++ openssh-6.9p1/readconf.h	2015-12-21 05:10:08.655401084 +0800
 @@ -134,6 +134,8 @@
  	char	*local_command;
  	int	permit_local_command;
@@ -432,8 +433,8 @@ Index: openssh-6.9p1/readconf.h
  
 Index: openssh-6.9p1/scp.c
 ===================================================================
---- openssh-6.9p1.orig/scp.c	2015-11-14 04:54:32.000000000 +0800
-+++ openssh-6.9p1/scp.c	2015-11-14 04:55:05.651526326 +0800
+--- openssh-6.9p1.orig/scp.c	2015-12-21 05:02:15.000000000 +0800
++++ openssh-6.9p1/scp.c	2015-12-21 05:10:08.659401084 +0800
 @@ -404,7 +404,7 @@
  	addargs(&args, "-oClearAllForwardings=yes");
  
@@ -461,8 +462,8 @@ Index: openssh-6.9p1/scp.c
  			addargs(&args, "-%c", ch);
 Index: openssh-6.9p1/servconf.c
 ===================================================================
---- openssh-6.9p1.orig/servconf.c	2015-11-14 04:54:32.000000000 +0800
-+++ openssh-6.9p1/servconf.c	2015-11-14 04:55:05.655526326 +0800
+--- openssh-6.9p1.orig/servconf.c	2015-12-21 05:02:15.000000000 +0800
++++ openssh-6.9p1/servconf.c	2015-12-21 05:10:08.659401084 +0800
 @@ -76,6 +76,7 @@
  
  	/* Standard Options */
@@ -566,8 +567,8 @@ Index: openssh-6.9p1/servconf.c
   parse_int:
 Index: openssh-6.9p1/servconf.h
 ===================================================================
---- openssh-6.9p1.orig/servconf.h	2015-11-14 04:54:32.000000000 +0800
-+++ openssh-6.9p1/servconf.h	2015-11-14 04:55:05.659526325 +0800
+--- openssh-6.9p1.orig/servconf.h	2015-12-21 05:02:15.000000000 +0800
++++ openssh-6.9p1/servconf.h	2015-12-21 05:10:08.659401084 +0800
 @@ -179,6 +179,11 @@
  	int	num_permitted_opens;
  
@@ -583,7 +584,7 @@ Index: openssh-6.9p1/servconf.h
 Index: openssh-6.9p1/sftp.c
 ===================================================================
 --- openssh-6.9p1.orig/sftp.c	2015-07-01 10:35:31.000000000 +0800
-+++ openssh-6.9p1/sftp.c	2015-11-14 04:55:05.659526325 +0800
++++ openssh-6.9p1/sftp.c	2015-12-21 05:10:08.659401084 +0800
 @@ -2265,12 +2265,13 @@
  	infile = stdin;
  
@@ -609,8 +610,8 @@ Index: openssh-6.9p1/sftp.c
  			break;
 Index: openssh-6.9p1/ssh.c
 ===================================================================
---- openssh-6.9p1.orig/ssh.c	2015-11-14 04:54:32.000000000 +0800
-+++ openssh-6.9p1/ssh.c	2015-11-14 04:55:05.659526325 +0800
+--- openssh-6.9p1.orig/ssh.c	2015-12-21 05:02:15.000000000 +0800
++++ openssh-6.9p1/ssh.c	2015-12-21 05:10:08.663401083 +0800
 @@ -200,14 +200,15 @@
  usage(void)
  {
@@ -654,8 +655,8 @@ Index: openssh-6.9p1/ssh.c
  		}
 Index: openssh-6.9p1/sshconnect.c
 ===================================================================
---- openssh-6.9p1.orig/sshconnect.c	2015-11-14 04:54:32.000000000 +0800
-+++ openssh-6.9p1/sshconnect.c	2015-11-14 04:57:01.723522121 +0800
+--- openssh-6.9p1.orig/sshconnect.c	2015-12-21 05:02:15.000000000 +0800
++++ openssh-6.9p1/sshconnect.c	2015-12-21 05:10:08.663401083 +0800
 @@ -63,6 +63,7 @@
  #include "monitor_fdpass.h"
  #include "ssh2.h"
@@ -703,7 +704,7 @@ Index: openssh-6.9p1/sshconnect.c
  		    PROTOCOL_MAJOR_2, PROTOCOL_MINOR_2, SSH_RELEASE);
  	} else {
 -		xasprintf(&client_version_string, "SSH-%d.%d-%.100s\n",
-+		snprintf(buf, sizeof buf, "SSH-%d.%d-%.100s\r\n",
++		snprintf(buf, sizeof buf, "SSH-%d.%d-%.100s\n",
  		    PROTOCOL_MAJOR_1, minor1, SSH_RELEASE);
  	}
 +	client_version_string = xstrdup(buf);
@@ -743,8 +744,8 @@ Index: openssh-6.9p1/sshconnect.c
  
 Index: openssh-6.9p1/sshd.c
 ===================================================================
---- openssh-6.9p1.orig/sshd.c	2015-11-14 04:54:32.000000000 +0800
-+++ openssh-6.9p1/sshd.c	2015-11-14 04:55:05.667526325 +0800
+--- openssh-6.9p1.orig/sshd.c	2015-12-21 05:02:15.000000000 +0800
++++ openssh-6.9p1/sshd.c	2015-12-21 05:10:08.667401083 +0800
 @@ -121,6 +121,7 @@
  #endif
  #include "monitor_wrap.h"
@@ -865,8 +866,8 @@ Index: openssh-6.9p1/sshd.c
  			error("Unable to get agent socket: %s", ssh_err(r));
 Index: openssh-6.9p1/sshd_config
 ===================================================================
---- openssh-6.9p1.orig/sshd_config	2015-11-14 04:54:32.000000000 +0800
-+++ openssh-6.9p1/sshd_config	2015-11-14 04:55:05.667526325 +0800
+--- openssh-6.9p1.orig/sshd_config	2015-12-21 05:02:15.000000000 +0800
++++ openssh-6.9p1/sshd_config	2015-12-21 05:10:08.667401083 +0800
 @@ -11,6 +11,8 @@
  # default value.
  
