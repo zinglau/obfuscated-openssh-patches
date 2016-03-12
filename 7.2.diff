@@ -1,7 +1,19 @@
 diff -Nurp openssh-7.2p1/kex.c openssh-7.2p1-ob/kex.c
 --- openssh-7.2p1/kex.c	2016-02-26 11:40:04.000000000 +0800
-+++ openssh-7.2p1-ob/kex.c	2016-03-11 17:27:51.318367562 +0800
-@@ -421,6 +421,7 @@ kex_input_newkeys(int type, u_int32_t se
++++ openssh-7.2p1-ob/kex.c	2016-03-12 09:53:42.103587618 +0800
+@@ -359,9 +359,11 @@ kex_send_newkeys(struct ssh *ssh)
+ 	debug("SSH2_MSG_NEWKEYS sent");
+ 	debug("expecting SSH2_MSG_NEWKEYS");
+ 	ssh_dispatch_set(ssh, SSH2_MSG_NEWKEYS, &kex_input_newkeys);
++	sshpkt_disable_obfuscation();
+ 	if (ssh->kex->ext_info_c)
+ 		if ((r = kex_send_ext_info(ssh)) != 0)
+ 			return r;
++	sshpkt_enable_obfuscation();
+ 	return 0;
+ }
+ 
+@@ -421,6 +423,7 @@ kex_input_newkeys(int type, u_int32_t se
  	kex->flags &= ~KEX_INIT_SENT;
  	free(kex->name);
  	kex->name = NULL;
