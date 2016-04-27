@@ -1,5 +1,5 @@
 Description: Add handshake obfuscation
-Author: zinglau <zinglau@gmail.com>
+Author: zinglau <zinglau2015@gmail.com>
 Index: openssh-6.7p1/Makefile.in
 ===================================================================
 --- openssh-6.7p1.orig/Makefile.in	2015-11-13 22:37:33.000000000 +0800
