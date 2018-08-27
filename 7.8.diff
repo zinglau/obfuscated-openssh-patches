@@ -1,0 +1,829 @@
+diff -Nurp openssh-7.7p1/kex.c openssh-7.7p1-ob/kex.c
+--- openssh-7.7p1/kex.c	2018-04-02 13:38:28.000000000 +0000
++++ openssh-7.7p1-ob/kex.c	2018-08-27 14:03:52.190871181 +0000
+@@ -367,9 +367,12 @@ kex_send_newkeys(struct ssh *ssh)
+ 	debug("SSH2_MSG_NEWKEYS sent");
+ 	debug("expecting SSH2_MSG_NEWKEYS");
+ 	ssh_dispatch_set(ssh, SSH2_MSG_NEWKEYS, &kex_input_newkeys);
+-	if (ssh->kex->ext_info_c)
++	if (ssh->kex->ext_info_c) {
++		sshpkt_disable_obfuscation();
+ 		if ((r = kex_send_ext_info(ssh)) != 0)
+ 			return r;
++		sshpkt_enable_obfuscation();
++	}
+ 	return 0;
+ }
+ 
+@@ -438,6 +441,7 @@ kex_input_newkeys(int type, u_int32_t se
+ 	kex->flags &= ~KEX_INIT_SENT;
+ 	free(kex->name);
+ 	kex->name = NULL;
++	sshpkt_disable_obfuscation();
+ 	return 0;
+ }
+ 
+diff -Nurp openssh-7.7p1/Makefile.in openssh-7.7p1-ob/Makefile.in
+--- openssh-7.7p1/Makefile.in	2018-04-02 13:38:28.000000000 +0000
++++ openssh-7.7p1-ob/Makefile.in	2018-08-27 14:03:52.190871181 +0000
+@@ -100,7 +100,7 @@ LIBSSH_OBJS=${LIBOPENSSH_OBJS} \
+ 	kex.o kexdh.o kexgex.o kexecdh.o kexc25519.o \
+ 	kexdhc.o kexgexc.o kexecdhc.o kexc25519c.o \
+ 	kexdhs.o kexgexs.o kexecdhs.o kexc25519s.o \
+-	platform-pledge.o platform-tracing.o platform-misc.o
++	platform-pledge.o platform-tracing.o platform-misc.o obfuscate.o
+ 
+ SSHOBJS= ssh.o readconf.o clientloop.o sshtty.o \
+ 	sshconnect.o sshconnect2.o mux.o
+diff -Nurp openssh-7.7p1/obfuscate.c openssh-7.7p1-ob/obfuscate.c
+--- openssh-7.7p1/obfuscate.c	1970-01-01 08:00:00.000000000 +0000
++++ openssh-7.7p1-ob/obfuscate.c	2018-08-27 14:03:52.190871181 +0000
+@@ -0,0 +1,216 @@
++#include "includes.h"
++#include <openssl/evp.h>
++#include <openssl/rc4.h>
++#include <unistd.h>
++#include <string.h>
++#include "atomicio.h"
++#include "canohost.h"
++#include "xmalloc.h"
++#include "log.h"
++#include "packet.h"
++#include "obfuscate.h"
++
++static RC4_KEY rc4_input;
++static RC4_KEY rc4_output;
++
++static const char *obfuscate_keyword = NULL;
++
++#define OBFUSCATE_KEY_LENGTH 	16
++#define OBFUSCATE_SEED_LENGTH	16
++#define OBFUSCATE_HASH_ITERATIONS 6000
++#define OBFUSCATE_MAX_PADDING	8192
++#define OBFUSCATE_MAGIC_VALUE	0x0BF5CA7E
++
++struct seed_msg {
++	u_char seed_buffer[OBFUSCATE_SEED_LENGTH];
++	u_int32_t magic;
++	u_int32_t padding_length;
++	u_char padding[];
++};
++
++static void generate_key_pair(const u_char *, u_char *, u_char *);
++static void generate_key(const u_char *, const u_char *, u_int, u_char *);
++static void set_keys(const u_char *, const u_char *);
++static void initialize(const u_char *, int);
++static void read_forever(int);
++
++
++/*
++ * Server calls this
++ */
++void
++obfuscate_receive_seed(struct ssh *ssh, int sock_in)
++{
++	struct seed_msg seed;
++
++	u_char padding_drain[OBFUSCATE_MAX_PADDING];
++	u_int len;
++	u_int32_t padding_length;
++
++	len = atomicio(read, sock_in, &seed, sizeof(struct seed_msg));
++
++	debug2("obfuscate_receive_seed: read %d byte seed message from client", len);
++	if(len != sizeof(struct seed_msg))
++		fatal("obfuscate_receive_seed: read failed");
++
++	initialize(seed.seed_buffer, 1);
++	obfuscate_input((u_char *)&seed.magic, 8);
++
++	if(OBFUSCATE_MAGIC_VALUE != ntohl(seed.magic)) {
++		logit("Magic value check failed (%u) on obfuscated handshake "
++ 			"from %.200s port %d", ntohl(seed.magic),
++			ssh_remote_ipaddr(ssh), ssh_remote_port(ssh));
++		read_forever(sock_in);
++	}
++	padding_length = ntohl(seed.padding_length);
++	if(padding_length > OBFUSCATE_MAX_PADDING) {
++		logit("Illegal padding length %d for obfuscated handshake "
++ 			"from %.200s port %d", ntohl(seed.padding_length),
++			ssh_remote_ipaddr(ssh), ssh_remote_port(ssh));
++		read_forever(sock_in);
++	}
++	len = atomicio(read, sock_in, padding_drain, padding_length);
++	if(len != padding_length)
++		fatal("obfuscate_receive_seed: read failed");
++	debug2("obfuscate_receive_seed: read %d bytes of padding from client.", len);
++	obfuscate_input(padding_drain, padding_length);
++}
++
++/*
++ * Client calls this
++ */
++void
++obfuscate_send_seed(int sock_out)
++{
++	struct seed_msg *seed;
++	int i;
++	u_int32_t rnd = 0;
++	u_int message_length;
++	u_int padding_length;
++
++	padding_length = arc4random() % OBFUSCATE_MAX_PADDING;
++	message_length = padding_length + sizeof(struct seed_msg);
++	seed = xmalloc(message_length);
++
++	for(i = 0; i < OBFUSCATE_SEED_LENGTH; i++) {
++		if(i % 4 == 0)
++			rnd = arc4random();
++		seed->seed_buffer[i] = rnd & 0xff;
++		rnd >>= 8;
++	}
++	seed->magic = htonl(OBFUSCATE_MAGIC_VALUE);
++	seed->padding_length = htonl(padding_length);
++	for(i = 0; i < (int)padding_length; i++) {
++		if(i % 4 == 0)
++			rnd = arc4random();
++		seed->padding[i] = rnd & 0xff;
++	}
++	initialize(seed->seed_buffer, 0);
++	obfuscate_output(((u_char *)seed) + OBFUSCATE_SEED_LENGTH,
++		message_length - OBFUSCATE_SEED_LENGTH);
++	debug2("obfuscate_send_seed: Sending seed message with %d bytes of padding", padding_length);
++	atomicio(vwrite, sock_out, seed, message_length);
++	free(seed);
++
++}
++
++void
++obfuscate_set_keyword(const char *keyword)
++{
++	debug2("obfuscate_set_keyword: Setting obfuscation keyword to '%s'", keyword);
++	obfuscate_keyword = keyword;
++}
++
++void
++obfuscate_input(u_char *buffer, u_int buffer_len)
++{
++	RC4(&rc4_input, buffer_len, buffer, buffer);
++}
++
++void
++obfuscate_output(u_char *buffer, u_int buffer_len)
++{
++	RC4(&rc4_output, buffer_len, buffer, buffer);
++}
++
++static void
++initialize(const u_char *seed, int server)
++{
++	u_char client_to_server_key[OBFUSCATE_KEY_LENGTH];
++	u_char server_to_client_key[OBFUSCATE_KEY_LENGTH];
++
++	generate_key_pair(seed, client_to_server_key, server_to_client_key);
++
++	if(server)
++		set_keys(client_to_server_key, server_to_client_key);
++	else
++		set_keys(server_to_client_key, client_to_server_key);
++}
++
++static void
++generate_key_pair(const u_char *seed, u_char *client_to_server_key, u_char *server_to_client_key)
++{
++	generate_key(seed, "client_to_server", strlen("client_to_server"), client_to_server_key);
++	generate_key(seed, "server_to_client", strlen("server_to_client"), server_to_client_key);
++}
++
++static void
++generate_key(const u_char *seed, const u_char *iv, u_int iv_len, u_char *key_data)
++{
++	EVP_MD_CTX ctx;
++	u_char md_output[EVP_MAX_MD_SIZE];
++	int md_len;
++	int i;
++	u_char *buffer;
++	u_char *p;
++	u_int buffer_length;
++
++	buffer_length = OBFUSCATE_SEED_LENGTH + iv_len;
++	if(obfuscate_keyword)
++		buffer_length += strlen(obfuscate_keyword);
++
++	p = buffer = xmalloc(buffer_length);
++
++	memcpy(p, seed, OBFUSCATE_SEED_LENGTH);
++	p += OBFUSCATE_SEED_LENGTH;
++
++	if(obfuscate_keyword) {
++		memcpy(p, obfuscate_keyword, strlen(obfuscate_keyword));
++		p += strlen(obfuscate_keyword);
++	}
++	memcpy(p, iv, iv_len);
++
++	EVP_DigestInit(&ctx, EVP_sha1());
++	EVP_DigestUpdate(&ctx, buffer, OBFUSCATE_SEED_LENGTH + iv_len);
++	EVP_DigestFinal(&ctx, md_output, &md_len);
++
++	free(buffer);
++
++	for(i = 0; i < OBFUSCATE_HASH_ITERATIONS; i++) {
++		EVP_DigestInit(&ctx, EVP_sha1());
++		EVP_DigestUpdate(&ctx, md_output, md_len);
++		EVP_DigestFinal(&ctx, md_output, &md_len);
++	}
++
++	if(md_len < OBFUSCATE_KEY_LENGTH)
++		fatal("Cannot derive obfuscation keys from hash length of %d", md_len);
++
++	memcpy(key_data, md_output, OBFUSCATE_KEY_LENGTH);
++}
++
++static void
++set_keys(const u_char *input_key, const u_char *output_key)
++{
++	RC4_set_key(&rc4_input, OBFUSCATE_KEY_LENGTH, input_key);
++	RC4_set_key(&rc4_output, OBFUSCATE_KEY_LENGTH, output_key);
++}
++
++static void
++read_forever(int sock_in)
++{
++	u_char discard_buffer[1024];
++
++	while(atomicio(read, sock_in, discard_buffer, sizeof(discard_buffer)) > 0)
++		;
++	cleanup_exit(255);
++}
+diff -Nurp openssh-7.7p1/obfuscate.h openssh-7.7p1-ob/obfuscate.h
+--- openssh-7.7p1/obfuscate.h	1970-01-01 08:00:00.000000000 +0000
++++ openssh-7.7p1-ob/obfuscate.h	2018-08-27 14:03:52.190871181 +0000
+@@ -0,0 +1,10 @@
++#ifndef _OBFUSCATE_H
++#define _OBFUSCATE_H
++
++void obfuscate_receive_seed(struct ssh *, int);
++void obfuscate_send_seed(int);
++void obfuscate_set_keyword(const char *);
++void obfuscate_input(u_char *, u_int);
++void obfuscate_output(u_char *, u_int);
++
++#endif
+diff -Nurp openssh-7.7p1/packet.c openssh-7.7p1-ob/packet.c
+--- openssh-7.7p1/packet.c	2018-04-02 13:38:28.000000000 +0000
++++ openssh-7.7p1-ob/packet.c	2018-08-27 14:03:52.190871181 +0000
+@@ -81,6 +81,7 @@
+ #include "channels.h"
+ #include "ssh.h"
+ #include "packet.h"
++#include "obfuscate.h"
+ #include "ssherr.h"
+ #include "sshbuf.h"
+ 
+@@ -168,6 +169,8 @@ struct session_state {
+ 	/* Set to true if we are authenticated. */
+ 	int after_authentication;
+ 
++	int obfuscation;
++
+ 	int keep_alive_timeouts;
+ 
+ 	/* The maximum time that we will wait to send or receive a packet */
+@@ -1163,6 +1166,8 @@ ssh_packet_send2_wrapped(struct ssh *ssh
+ 		if ((r = sshbuf_put(state->output, macbuf, mac->mac_len)) != 0)
+ 			goto out;
+ 	}
++	if(state->obfuscation)
++		obfuscate_output(cp, sshbuf_len(state->outgoing_packet));
+ #ifdef PACKET_DEBUG
+ 	fprintf(stderr, "encrypted: ");
+ 	sshbuf_dump(state->output, stderr);
+@@ -1503,6 +1508,8 @@ ssh_packet_read_poll2(struct ssh *ssh, u
+ 		if ((r = sshbuf_reserve(state->incoming_packet, block_size,
+ 		    &cp)) != 0)
+ 			goto out;
++		if(state->obfuscation)
++			obfuscate_input(sshbuf_mutable_ptr(state->input), block_size);
+ 		if ((r = cipher_crypt(state->receive_context,
+ 		    state->p_send.seqnr, cp, sshbuf_ptr(state->input),
+ 		    block_size, 0, 0)) != 0)
+@@ -1568,6 +1575,8 @@ ssh_packet_read_poll2(struct ssh *ssh, u
+ 			goto out;
+ 		}
+ 	}
++	if(state->obfuscation)
++		obfuscate_input(sshbuf_mutable_ptr(state->input), need);
+ 	if ((r = sshbuf_reserve(state->incoming_packet, aadlen + need,
+ 	    &cp)) != 0)
+ 		goto out;
+@@ -2684,3 +2693,20 @@ sshpkt_add_padding(struct ssh *ssh, u_ch
+ 	ssh->state->extra_pad = pad;
+ 	return 0;
+ }
++
++void
++sshpkt_enable_obfuscation()
++{
++	debug("Obfuscation enabled");
++	active_state->state->obfuscation = 1;
++}
++
++void
++sshpkt_disable_obfuscation()
++{
++	if(active_state != NULL) /* XXX - needed for passing test_kex */
++		if(active_state->state->obfuscation) {
++			debug("Obfuscation disabled");
++			active_state->state->obfuscation = 0;
++		}
++}
+diff -Nurp openssh-7.7p1/packet.h openssh-7.7p1-ob/packet.h
+--- openssh-7.7p1/packet.h	2018-04-02 13:38:28.000000000 +0000
++++ openssh-7.7p1-ob/packet.h	2018-08-27 14:03:52.190871181 +0000
+@@ -179,6 +179,8 @@ int     sshpkt_disconnect(struct ssh *,
+ int	sshpkt_add_padding(struct ssh *, u_char);
+ void	sshpkt_fatal(struct ssh *ssh, const char *tag, int r);
+ int	sshpkt_msg_ignore(struct ssh *, u_int);
++void	sshpkt_enable_obfuscation(void);
++void	sshpkt_disable_obfuscation(void);
+ 
+ int	sshpkt_put(struct ssh *ssh, const void *v, size_t len);
+ int	sshpkt_putb(struct ssh *ssh, const struct sshbuf *b);
+diff -Nurp openssh-7.7p1/readconf.c openssh-7.7p1-ob/readconf.c
+--- openssh-7.7p1/readconf.c	2018-04-02 13:38:28.000000000 +0000
++++ openssh-7.7p1-ob/readconf.c	2018-08-27 14:03:52.190871181 +0000
+@@ -143,7 +143,7 @@ typedef enum {
+ 	oBadOption,
+ 	oHost, oMatch, oInclude,
+ 	oForwardAgent, oForwardX11, oForwardX11Trusted, oForwardX11Timeout,
+-	oGatewayPorts, oExitOnForwardFailure,
++	oGatewayPorts, oExitOnForwardFailure, oObfuscateHandshake, oObfuscateKeyword,
+ 	oPasswordAuthentication, oRSAAuthentication,
+ 	oChallengeResponseAuthentication, oXAuthLocation,
+ 	oIdentityFile, oHostName, oPort, oCipher, oRemoteForward, oLocalForward,
+@@ -306,7 +306,8 @@ static struct {
+ 	{ "pubkeyacceptedkeytypes", oPubkeyAcceptedKeyTypes },
+ 	{ "ignoreunknown", oIgnoreUnknown },
+ 	{ "proxyjump", oProxyJump },
+-
++	{ "obfuscatehandshake", oObfuscateHandshake },
++	{ "obfuscatekeyword", oObfuscateKeyword },
+ 	{ NULL, oBadOption }
+ };
+ 
+@@ -1644,6 +1645,16 @@ parse_keytypes:
+ 		charptr = &options->identity_agent;
+ 		goto parse_string;
+ 
++	case oObfuscateHandshake:
++		intptr = &options->obfuscate_handshake;
++		goto parse_flag;
++
++	case oObfuscateKeyword:
++		if (*activep)
++			options->obfuscate_handshake = 1;
++		charptr = &options->obfuscate_keyword;
++		goto parse_string;
++
+ 	case oDeprecated:
+ 		debug("%s line %d: Deprecated option \"%s\"",
+ 		    filename, linenum, keyword);
+@@ -1830,6 +1841,8 @@ initialize_options(Options * options)
+ 	options->add_keys_to_agent = -1;
+ 	options->identity_agent = NULL;
+ 	options->visual_host_key = -1;
++	options->obfuscate_handshake = 0;
++	options->obfuscate_keyword = NULL;
+ 	options->ip_qos_interactive = -1;
+ 	options->ip_qos_bulk = -1;
+ 	options->request_tty = -1;
+diff -Nurp openssh-7.7p1/readconf.h openssh-7.7p1-ob/readconf.h
+--- openssh-7.7p1/readconf.h	2018-04-02 13:38:28.000000000 +0000
++++ openssh-7.7p1-ob/readconf.h	2018-08-27 14:03:52.190871181 +0000
+@@ -137,6 +137,8 @@ typedef struct {
+ 	int	permit_local_command;
+ 	char	*remote_command;
+ 	int	visual_host_key;
++	int obfuscate_handshake;
++	char *obfuscate_keyword;
+ 
+ 	int	request_tty;
+ 
+diff -Nurp openssh-7.7p1/scp.c openssh-7.7p1-ob/scp.c
+--- openssh-7.7p1/scp.c	2018-04-02 13:38:28.000000000 +0000
++++ openssh-7.7p1-ob/scp.c	2018-08-27 14:03:52.194871159 +0000
+@@ -422,7 +422,7 @@ main(int argc, char **argv)
+ 	addargs(&args, "-oRequestTTY=no");
+ 
+ 	fflag = tflag = 0;
+-	while ((ch = getopt(argc, argv, "dfl:prtvBCc:i:P:q12346S:o:F:")) != -1)
++	while ((ch = getopt(argc, argv, "dfl:prtvBCc:i:P:q12346S:o:F:zZ:")) != -1)
+ 		switch (ch) {
+ 		/* User-visible flags. */
+ 		case '1':
+@@ -434,6 +434,7 @@ main(int argc, char **argv)
+ 		case '4':
+ 		case '6':
+ 		case 'C':
++		case 'z':
+ 			addargs(&args, "-%c", ch);
+ 			addargs(&remote_remote_args, "-%c", ch);
+ 			break;
+@@ -444,6 +445,7 @@ main(int argc, char **argv)
+ 		case 'c':
+ 		case 'i':
+ 		case 'F':
++		case 'Z':
+ 			addargs(&remote_remote_args, "-%c", ch);
+ 			addargs(&remote_remote_args, "%s", optarg);
+ 			addargs(&args, "-%c", ch);
+diff -Nurp openssh-7.7p1/servconf.c openssh-7.7p1-ob/servconf.c
+--- openssh-7.7p1/servconf.c	2018-04-02 13:38:28.000000000 +0000
++++ openssh-7.7p1-ob/servconf.c	2018-08-27 14:04:15.834741648 +0000
+@@ -85,6 +85,7 @@ initialize_server_options(ServerOptions
+ 
+ 	/* Standard Options */
+ 	options->num_ports = 0;
++	options->num_obfuscated_ports = 0;
+ 	options->ports_from_cmdline = 0;
+ 	options->queued_listen_addrs = NULL;
+ 	options->num_queued_listens = 0;
+@@ -162,6 +163,7 @@ initialize_server_options(ServerOptions
+ 	options->permitted_opens = NULL;
+ 	options->adm_forced_command = NULL;
+ 	options->chroot_directory = NULL;
++	options->obfuscate_keyword = NULL;
+ 	options->authorized_keys_command = NULL;
+ 	options->authorized_keys_command_user = NULL;
+ 	options->revoked_keys_file = NULL;
+@@ -259,7 +261,7 @@ fill_default_server_options(ServerOption
+ #endif /* WITH_XMSS */
+ 	}
+ 	/* No certificates by default */
+-	if (options->num_ports == 0)
++	if (options->num_ports == 0 && options->num_obfuscated_ports == 0)
+ 		options->ports[options->num_ports++] = SSH_DEFAULT_PORT;
+ 	if (options->address_family == -1)
+ 		options->address_family = AF_UNSPEC;
+@@ -441,7 +443,7 @@ typedef enum {
+ 	/* Portable-specific options */
+ 	sUsePAM,
+ 	/* Standard Options */
+-	sPort, sHostKeyFile, sLoginGraceTime,
++	sPort, sObfuscatedPort, sObfuscateKeyword, sHostKeyFile, sLoginGraceTime,
+ 	sPermitRootLogin, sLogFacility, sLogLevel,
+ 	sRhostsRSAAuthentication, sRSAAuthentication,
+ 	sKerberosAuthentication, sKerberosOrLocalPasswd, sKerberosTicketCleanup,
+@@ -495,6 +497,8 @@ static struct {
+ 	{ "pamauthenticationviakbdint", sDeprecated, SSHCFG_GLOBAL },
+ 	/* Standard Options */
+ 	{ "port", sPort, SSHCFG_GLOBAL },
++	{ "obfuscatedport", sObfuscatedPort, SSHCFG_GLOBAL },
++	{ "obfuscatekeyword", sObfuscateKeyword, SSHCFG_GLOBAL },
+ 	{ "hostkey", sHostKeyFile, SSHCFG_GLOBAL },
+ 	{ "hostdsakey", sHostKeyFile, SSHCFG_GLOBAL },		/* alias */
+ 	{ "hostkeyagent", sHostKeyAgent, SSHCFG_GLOBAL },
+@@ -683,6 +687,10 @@ add_listen_addr(ServerOptions *options,
+ 			add_one_listen_addr(options, addr, rdomain,
+ 			    options->ports[i]);
+ 		}
++		for (i = 0; i < options->num_obfuscated_ports; i++) {
++			add_one_listen_addr(options, addr, rdomain,
++				options->obfuscated_ports[i]);
++		}
+ 	}
+ }
+ 
+@@ -797,7 +805,7 @@ process_queued_listen_addrs(ServerOption
+ 	u_int i;
+ 	struct queued_listenaddr *qla;
+ 
+-	if (options->num_ports == 0)
++	if (options->num_ports == 0 && options->num_obfuscated_ports == 0)
+ 		options->ports[options->num_ports++] = SSH_DEFAULT_PORT;
+ 	if (options->address_family == -1)
+ 		options->address_family = AF_UNSPEC;
+@@ -1219,6 +1227,30 @@ process_server_config_line(ServerOptions
+ 			    filename, linenum);
+ 		break;
+ 
++	case sObfuscatedPort:
++		if(options->ports_from_cmdline)
++			return 0;
++		if(options->listen_addrs != NULL)
++			fatal("%s line %d: ports must be specified before ListenAddress.", filename, linenum);
++		if(options->num_obfuscated_ports >= MAX_PORTS)
++			fatal("%s line %d: too many ports.", filename, linenum);
++		arg = strdelim(&cp);
++		if(!arg || *arg == '\0')
++			fatal("%s line %d: missing port number.", filename, linenum);
++		options->obfuscated_ports[options->num_obfuscated_ports++] = a2port(arg);
++		if(options->obfuscated_ports[options->num_obfuscated_ports - 1] <= 0)
++			fatal("%s line %d: badly formatted port number.", filename, linenum);
++		break;
++	case sObfuscateKeyword:
++		charptr = &options->obfuscate_keyword;
++		arg = strdelim(&cp);
++		if(!arg || *arg == '\0')
++			fatal("%s line %d: missing keyword argument.",
++					filename, linenum);
++		if(*activep && *charptr == NULL)
++			*charptr = xstrdup(arg);
++		break;
++
+ 	case sLoginGraceTime:
+ 		intptr = &options->login_grace_time;
+  parse_time:
+diff -Nurp openssh-7.7p1/servconf.h openssh-7.7p1-ob/servconf.h
+--- openssh-7.7p1/servconf.h	2018-04-02 13:38:28.000000000 +0000
++++ openssh-7.7p1-ob/servconf.h	2018-08-27 14:03:52.194871159 +0000
+@@ -191,6 +191,11 @@ typedef struct {
+ 	u_int   num_permitted_opens; /* May also be one of PERMITOPEN_* */
+ 
+ 	char   *chroot_directory;
++
++	int obfuscated_ports[MAX_PORTS];
++	u_int num_obfuscated_ports;
++	char *obfuscate_keyword;
++
+ 	char   *revoked_keys_file;
+ 	char   *trusted_user_ca_keys;
+ 	char   *authorized_keys_command;
+diff -Nurp openssh-7.7p1/sftp.c openssh-7.7p1-ob/sftp.c
+--- openssh-7.7p1/sftp.c	2018-04-02 13:38:28.000000000 +0000
++++ openssh-7.7p1-ob/sftp.c	2018-08-27 14:03:52.194871159 +0000
+@@ -2352,12 +2352,13 @@ main(int argc, char **argv)
+ 	infile = stdin;
+ 
+ 	while ((ch = getopt(argc, argv,
+-	    "1246afhpqrvCc:D:i:l:o:s:S:b:B:F:P:R:")) != -1) {
++	    "1246afhpqrvCc:D:i:l:o:s:S:b:B:F:P:R:zZ:")) != -1) {
+ 		switch (ch) {
+ 		/* Passed through to ssh(1) */
+ 		case '4':
+ 		case '6':
+ 		case 'C':
++		case 'z':
+ 			addargs(&args, "-%c", ch);
+ 			break;
+ 		/* Passed through to ssh(1) with argument */
+@@ -2365,6 +2366,7 @@ main(int argc, char **argv)
+ 		case 'c':
+ 		case 'i':
+ 		case 'o':
++		case 'Z':
+ 			addargs(&args, "-%c", ch);
+ 			addargs(&args, "%s", optarg);
+ 			break;
+diff -Nurp openssh-7.7p1/ssh.c openssh-7.7p1-ob/ssh.c
+--- openssh-7.7p1/ssh.c	2018-04-02 13:38:28.000000000 +0000
++++ openssh-7.7p1-ob/ssh.c	2018-08-27 14:04:25.402689262 +0000
+@@ -201,13 +201,14 @@ static void
+ usage(void)
+ {
+ 	fprintf(stderr,
+-"usage: ssh [-46AaCfGgKkMNnqsTtVvXxYy] [-B bind_interface]\n"
++"usage: ssh [-46AaCfGgKkMNnqsTtVvXxYyz] [-B bind_interface]\n"
+ "           [-b bind_address] [-c cipher_spec] [-D [bind_address:]port]\n"
+ "           [-E log_file] [-e escape_char] [-F configfile] [-I pkcs11]\n"
+ "           [-i identity_file] [-J [user@]host[:port]] [-L address]\n"
+ "           [-l login_name] [-m mac_spec] [-O ctl_cmd] [-o option] [-p port]\n"
+ "           [-Q query_option] [-R address] [-S ctl_path] [-W host:port]\n"
+-"           [-w local_tun[:remote_tun]] destination [command]\n"
++"           [-w local_tun[:remote_tun]] [-Z obfuscate_keyword]\n"
++"			destination [command]\n"
+ 	);
+ 	exit(255);
+ }
+@@ -663,7 +664,7 @@ main(int ac, char **av)
+ 
+  again:
+ 	while ((opt = getopt(ac, av, "1246ab:c:e:fgi:kl:m:no:p:qstvx"
+-	    "AB:CD:E:F:GI:J:KL:MNO:PQ:R:S:TVw:W:XYy")) != -1) {
++	    "AB:CD:E:F:GI:J:KL:MNO:PQ:R:S:TVw:W:XYyzZ:")) != -1) {
+ 		switch (opt) {
+ 		case '1':
+ 			fatal("SSH protocol v.1 is no longer supported");
+@@ -979,6 +980,13 @@ main(int ac, char **av)
+ 		case 'F':
+ 			config = optarg;
+ 			break;
++		case 'z':
++			options.obfuscate_handshake = 1;
++			break;
++		case 'Z':
++			options.obfuscate_handshake = 1;
++			options.obfuscate_keyword = optarg;
++			break;
+ 		default:
+ 			usage();
+ 		}
+diff -Nurp openssh-7.7p1/sshconnect.c openssh-7.7p1-ob/sshconnect.c
+--- openssh-7.7p1/sshconnect.c	2018-04-02 13:38:28.000000000 +0000
++++ openssh-7.7p1-ob/sshconnect.c	2018-08-27 14:03:52.198871136 +0000
+@@ -67,6 +67,7 @@
+ #include "monitor_fdpass.h"
+ #include "ssh2.h"
+ #include "version.h"
++#include "obfuscate.h"
+ #include "authfile.h"
+ #include "ssherr.h"
+ #include "authfd.h"
+@@ -260,6 +261,12 @@ ssh_proxy_connect(struct ssh *ssh, const
+ 	if (ssh_packet_set_connection(ssh, pout[0], pin[1]) == NULL)
+ 		return -1; /* ssh_packet_set_connection logs error */
+ 
++	if(options.obfuscate_handshake) {
++		if(options.obfuscate_keyword)
++			obfuscate_set_keyword(options.obfuscate_keyword);
++		sshpkt_enable_obfuscation();
++	}
++
+ 	return 0;
+ }
+ 
+@@ -608,6 +615,11 @@ ssh_connect_direct(struct ssh *ssh, cons
+ 	/* Set the connection. */
+ 	if (ssh_packet_set_connection(ssh, sock, sock) == NULL)
+ 		return -1; /* ssh_packet_set_connection logs error */
++	if(options.obfuscate_handshake) {
++		if(options.obfuscate_keyword)
++			obfuscate_set_keyword(options.obfuscate_keyword);
++		sshpkt_enable_obfuscation();
++	}
+ 
+         return 0;
+ }
+@@ -636,12 +648,23 @@ ssh_connect(struct ssh *ssh, const char
+ static void
+ send_client_banner(int connection_out, int minor1)
+ {
++	char buf[256]; //XXX hack necessary for 6.2 upwards
++	u_int sendlen;
+ 	/* Send our own protocol version identification. */
+-	xasprintf(&client_version_string, "SSH-%d.%d-%.100s\r\n",
++	snprintf(buf, sizeof buf, "SSH-%d.%d-%.100s\r\n",
+ 	    PROTOCOL_MAJOR_2, PROTOCOL_MINOR_2, SSH_VERSION);
++	client_version_string = xstrdup(buf);
++	sendlen = strlen(client_version_string);
++	if(options.obfuscate_handshake)
++		obfuscate_output(client_version_string, sendlen);
+ 	if (atomicio(vwrite, connection_out, client_version_string,
+-	    strlen(client_version_string)) != strlen(client_version_string))
++	    sendlen) != sendlen)
+ 		fatal("write: %.100s", strerror(errno));
++	if(options.obfuscate_handshake) {
++		free(client_version_string);
++		client_version_string = strdup(buf);
++	}
++	memset(buf, 0, sizeof(buf));
+ 	chop(client_version_string);
+ 	debug("Local version string %.100s", client_version_string);
+ }
+@@ -684,6 +707,8 @@ ssh_exchange_identification(int timeout_
+ 			else if (len != 1)
+ 				fatal("ssh_exchange_identification: "
+ 				    "read: %.100s", strerror(errno));
++			if(options.obfuscate_handshake)
++				obfuscate_input(&buf[i], 1);
+ 			if (buf[i] == '\r') {
+ 				buf[i] = '\n';
+ 				buf[i + 1] = 0;
+@@ -1434,6 +1459,9 @@ ssh_login(Sensitive *sensitive, const ch
+ 	host = xstrdup(orighost);
+ 	lowercase(host);
+ 
++	if(options.obfuscate_handshake)
++		obfuscate_send_seed(packet_get_connection_out());
++
+ 	/* Exchange protocol version identification strings with the server. */
+ 	ssh_exchange_identification(timeout_ms);
+ 
+diff -Nurp openssh-7.7p1/sshd.c openssh-7.7p1-ob/sshd.c
+--- openssh-7.7p1/sshd.c	2018-04-02 13:38:28.000000000 +0000
++++ openssh-7.7p1-ob/sshd.c	2018-08-27 14:04:27.762676340 +0000
+@@ -118,6 +118,7 @@
+ #include "ssh-gss.h"
+ #endif
+ #include "monitor_wrap.h"
++#include "obfuscate.h"
+ #include "ssh-sandbox.h"
+ #include "auth-options.h"
+ #include "version.h"
+@@ -242,6 +243,9 @@ Buffer cfg;
+ /* message to be displayed after login */
+ Buffer loginmsg;
+ 
++/* Enable handshake obfuscation */
++int use_obfuscation = 0;
++
+ /* Unprivileged user */
+ struct passwd *privsep_pw = NULL;
+ 
+@@ -371,21 +375,31 @@ sshd_exchange_identification(struct ssh
+ 	char *s;
+ 	char buf[256];			/* Must not be larger than remote_version. */
+ 	char remote_version[256];	/* Must be at least as big as buf. */
++	u_int sendlen;
+ 
+-	xasprintf(&server_version_string, "SSH-%d.%d-%.100s%s%s\r\n",
++	snprintf(buf, sizeof buf, "SSH-%d.%d-%.100s%s%s\r\n",
+ 	    PROTOCOL_MAJOR_2, PROTOCOL_MINOR_2, SSH_VERSION,
+ 	    *options.version_addendum == '\0' ? "" : " ",
+ 	    options.version_addendum);
++	server_version_string = xstrdup(buf);
++	sendlen = strlen(server_version_string);
++	if(use_obfuscation)
++		obfuscate_output(server_version_string, sendlen);
+ 
+ 	/* Send our protocol version identification. */
+ 	if (atomicio(vwrite, sock_out, server_version_string,
+-	    strlen(server_version_string))
+-	    != strlen(server_version_string)) {
++	    sendlen)
++	    != sendlen) {
+ 		logit("Could not write ident string to %s port %d",
+ 		    ssh_remote_ipaddr(ssh), ssh_remote_port(ssh));
+ 		cleanup_exit(255);
+ 	}
+ 
++	if(use_obfuscation) {
++		free(server_version_string);
++		server_version_string = strdup(buf);
++	}
++
+ 	/* Read other sides version identification. */
+ 	memset(buf, 0, sizeof(buf));
+ 	for (i = 0; i < sizeof(buf) - 1; i++) {
+@@ -395,6 +409,8 @@ sshd_exchange_identification(struct ssh
+ 			    ssh_remote_ipaddr(ssh), ssh_remote_port(ssh));
+ 			cleanup_exit(255);
+ 		}
++		if(use_obfuscation)
++			obfuscate_input(&buf[i], 1);
+ 		if (buf[i] == '\r') {
+ 			buf[i] = 0;
+ 			/* Kludge for F-Secure Macintosh < 1.0.2 */
+@@ -1422,7 +1438,7 @@ main(int ac, char **av)
+ 	struct ssh *ssh = NULL;
+ 	extern char *optarg;
+ 	extern int optind;
+-	int r, opt, on = 1, already_daemon, remote_port;
++	int r, opt, on = 1, already_daemon, remote_port, local_port;
+ 	int sock_in = -1, sock_out = -1, newsock = -1;
+ 	const char *remote_ip, *rdomain;
+ 	char *fp, *line, *laddr, *logfile = NULL;
+@@ -2012,6 +2028,14 @@ main(int ac, char **av)
+ 	channel_set_af(ssh, options.address_family);
+ 	process_permitopen(ssh, &options);
+ 
++	local_port = ssh_local_port(ssh);
++	for(i = 0; i < (int)options.num_obfuscated_ports; i++) {
++		if(options.obfuscated_ports[i] == local_port) {
++			use_obfuscation = 1;
++			break;
++		}
++	}
++
+ 	/* Set SO_KEEPALIVE if requested. */
+ 	if (options.tcp_keep_alive && packet_connection_is_on_socket() &&
+ 	    setsockopt(sock_in, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on)) < 0)
+@@ -2059,6 +2083,13 @@ main(int ac, char **av)
+ 	if (!debug_flag)
+ 		alarm(options.login_grace_time);
+ 
++	if(use_obfuscation) {
++		if(options.obfuscate_keyword)
++			obfuscate_set_keyword(options.obfuscate_keyword);
++		sshpkt_enable_obfuscation();
++		obfuscate_receive_seed(ssh, sock_in);
++	}
++
+ 	sshd_exchange_identification(ssh, sock_in, sock_out);
+ 	packet_set_nonblocking();
+ 
+@@ -2079,8 +2110,11 @@ main(int ac, char **av)
+ 	auth_debug_reset();
+ 
+ 	if (use_privsep) {
+-		if (privsep_preauth(authctxt) == 1)
++		if (privsep_preauth(authctxt) == 1) {
++			if(use_obfuscation)
++				sshpkt_disable_obfuscation();
+ 			goto authenticated;
++		}
+ 	} else if (have_agent) {
+ 		if ((r = ssh_get_authentication_socket(&auth_sock)) != 0) {
+ 			error("Unable to get agent socket: %s", ssh_err(r));
+diff -Nurp openssh-7.7p1/sshd_config openssh-7.7p1-ob/sshd_config
+--- openssh-7.7p1/sshd_config	2018-04-02 13:38:28.000000000 +0000
++++ openssh-7.7p1-ob/sshd_config	2018-08-27 14:03:52.198871136 +0000
+@@ -11,6 +11,8 @@
+ # default value.
+ 
+ #Port 22
++#ObfuscatedPort 222
++#ObfuscateKeyword key
+ #AddressFamily any
+ #ListenAddress 0.0.0.0
+ #ListenAddress ::
