@@ -61,7 +61,7 @@ diff -Nurp openssh-8.0p1/kex.c openssh-8.0p1-ob/kex.c
 +	  if ((r = sshbuf_consume(our_version, sshbuf_len(our_version))) != 0) {
 +			error("%s: sshbuf_consume failed for obfuscation", __func__);
 +			free(cp);
-+			goto out;	  
++			goto out;
 +	  }
 +		if ((r = sshbuf_put(our_version, cp, strlen(cp))) != 0) {
 +			error("%s: sshbuf_put failed for obfuscation", __func__);
