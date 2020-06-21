@@ -11,6 +11,9 @@
 ### [Ubuntu PPA](https://launchpad.net/~zinglau/+archive/ubuntu/obfuscated-openssh)
 
 
+### [Debian Archive](https://deb.zinglau.com/)
+
+
 ### Acknowledgements
 - [brl](https://github.com/brl) developed the initial concept and authored the handshake obfuscattion patch
  for openssh-5.2 ([repo](https://github.com/brl/obfuscated-openssh)).
