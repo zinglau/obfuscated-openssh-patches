@@ -13,11 +13,11 @@ diff -Nurp openssh-9.6p1/kex.c openssh-9.6p1-ob/kex.c
  		return r;
  	debug("SSH2_MSG_NEWKEYS sent");
  	ssh_dispatch_set(ssh, SSH2_MSG_NEWKEYS, &kex_input_newkeys);
-+    sshpkt_disable_obfuscation(ssh);
++	sshpkt_disable_obfuscation(ssh);
  	if ((r = kex_maybe_send_ext_info(ssh)) != 0)
 -		return r;
-+		return r;	
-+    sshpkt_enable_obfuscation(ssh);
++		return r;
++	sshpkt_enable_obfuscation(ssh);
  	debug("expecting SSH2_MSG_NEWKEYS");
  	return 0;
  }
