@@ -1,0 +1,6 @@
+name: Build obfuscated openssh-portable-win32
+
+on:
+  workflow_dispatch
+
+jobs:
