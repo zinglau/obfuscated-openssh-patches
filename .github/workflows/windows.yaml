@@ -1,8 +1,8 @@
 name: Build openssh-portable-win32
 
 on:
-#  push:
-#    branches: [ debug-actions ]
+  push:
+    branches: [ debug-actions ]
   workflow_dispatch:
     inputs:
       tag_name:
