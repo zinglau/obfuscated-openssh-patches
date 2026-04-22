@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 1
 
       - name: Bootstrap vcpkg
-        working-directory: .\openssh-portable
+        working-directory: ./openssh-portable
         run: .\bootstrap-vcpkg.bat
 
       - name: Integrate vcpkg
