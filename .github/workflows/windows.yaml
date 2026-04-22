@@ -77,7 +77,6 @@ jobs:
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
-        working-directory: .\openssh-portable
         with:
           name: Build-${{ matrix.arch }}-${{ matrix.config }}
           path: "*.zip"
