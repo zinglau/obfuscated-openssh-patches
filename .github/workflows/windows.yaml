@@ -39,7 +39,7 @@ jobs:
           if (Test-Path $patchFile) {
               echo "Applying patch: $patchFile"
               cd openssh-portable
-              git apply "../$PatchFile"
+              patch -p1 < "../$patchFile"
           } else {
               echo "$patchFile not found! Quitting..."
               exit 1
