@@ -1,13 +1,14 @@
 name: Build openssh-portable-win32
 
 on:
-  push:
-    branches: [ debug-actions ]
+#  push:
+#    branches: [ debug-actions ]
   workflow_dispatch:
-    # inputs:
-    #   patch_name:
-    #     required: true
-    #     default: 'main.patch'
+    inputs:
+      tag_name:
+        description: 'Tag to build (leave empty for latest)'
+        required: false
+        default:
 
 jobs:
   patch-and-build:
@@ -18,11 +19,33 @@ jobs:
         config: [Release, Debug]
 
     steps:
+      - name: Fetch latest release tag
+        id: latest_tag
+        uses: pozetroninc/github-action-get-latest-release@v0.5.0
+        with:
+          repository: "PowerShell/openssh-portable"
+
       - name: Checkout upstream
         uses: actions/checkout@v4
         with:
-          repository: 'PowerShell/openssh-portable'
+          repository: "PowerShell/openssh-portable"
+          ref: ${{ github.event.inputs.tag_name != '' && github.event.inputs.tag_name || steps.latest_tag.outputs.release }}
           path: openssh-portable
+
+      - name: Bootstrap vcpkg
+        working-directory: openssh-portable
+        run: .\bootstrap-vcpkg.bat
+
+      - name: Integrate vcpkg
+        working-directory: openssh-portable
+        run: .\vcpkg.exe integrate install
+
+      - name: Build OpenSSH
+        working-directory: upstream-repo
+        shell: powershell
+        run: |
+          ipmo .\contrib\win32\openssh\BuildHelper.psm1 -Force
+          Start-OpenSSHBuild -Configuration Release -NativeHostArch x64
 
       - name: Build and Package
         shell: powershell
