@@ -16,7 +16,7 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
-        arch: [ARM64] #[x86, x64, ARM64]
+        arch: [x86, x64, ARM64]
         config: [Release, Debug]
 
     steps:
