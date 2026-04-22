@@ -15,22 +15,17 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        arch: [x86, x64, ARM, ARM64]
-        config: [Release, Debug]
+        arch: x86 # [x86, x64, ARM, ARM64]
+        config: Release #[Release, Debug]
 
     steps:
-      - name: Fetch latest release tag
-        id: latest_tag
-        uses: pozetroninc/github-action-get-latest-release@v0.5.0
-        with:
-          repository: "PowerShell/openssh-portable"
-
       - name: Checkout upstream
         uses: actions/checkout@v4
         with:
           repository: "PowerShell/openssh-portable"
-          ref: ${{ github.event.inputs.tag_name != '' && github.event.inputs.tag_name || steps.latest_tag.outputs.release }}
+          ref: ${{ github.event.inputs.tag_name != '' && github.event.inputs.tag_name || 'v9.8.3.0' }}
           path: openssh-portable
+          fetch-depth: 1
 
       - name: Bootstrap vcpkg
         working-directory: openssh-portable
