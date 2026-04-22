@@ -48,8 +48,9 @@ jobs:
 
       - name: Package to Zip
         run: |
+          $arch = if (${{ matrix.arch }} -eq "x86") { "Win32" } else { ${{ matrix.arch }} }
           $zipName = "ObfuscatedOpenSSH_Windows_${{ matrix.arch }}_${{ matrix.config }}.zip"
-          $targetPath = ".\openssh-portable\bin\${{ matrix.arch }}\${{ matrix.config }}\"
+          $targetPath = ".\openssh-portable\bin\${{ arch }}\${{ matrix.config }}\"
           Compress-Archive -Path "$targetPath*" -DestinationPath $zipName
 
       - name: Upload Artifact
