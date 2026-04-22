@@ -16,7 +16,7 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
-        arch: [x86, x64, ARM, ARM64]
+        arch: [arm] #[x86, x64, arm, arm64]
         config: [Release, Debug]
 
     steps:
@@ -64,6 +64,14 @@ jobs:
           cd openssh-portable
           ipmo .\contrib\win32\openssh\OpenSSHBuildHelper.psm1 -Force
           Start-OpenSSHBuild -Configuration ${{ matrix.config }} -NativeHostArch ${{ matrix.arch }}
+
+      - name: Print Build Log on Failure
+        if: failure()
+        run: |
+          cd openssh-portable
+          Write-Host "--- DETAILED BUILD LOG START ---" -ForegroundColor Red
+          Get-Content ".\contrib\win32\openssh\OpenSSH${{ matrix.config }}${{ matrix.arch }}.log"
+          Write-Host "--- DETAILED BUILD LOG END ---" -ForegroundColor Red
 
       - name: Package to Zip
         run: |
