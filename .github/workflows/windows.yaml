@@ -28,21 +28,22 @@ jobs:
           fetch-depth: 1
 
       - name: Bootstrap vcpkg
-        working-directory: openssh-portable
+        working-directory: .\openssh-portable
         run: .\bootstrap-vcpkg.bat
 
       - name: Integrate vcpkg
-        working-directory: openssh-portable
+        working-directory: .\openssh-portable
         run: .\vcpkg.exe integrate install
 
       - name: Build OpenSSH
-        working-directory: upstream-repo
+        working-directory: .\openssh-portable
         shell: powershell
         run: |
           ipmo .\contrib\win32\openssh\BuildHelper.psm1 -Force
           Start-OpenSSHBuild -Configuration Release -NativeHostArch x64
 
       - name: Build and Package
+        working-directory: .\openssh-portable
         shell: powershell
         run: |
           cd openssh-portable
@@ -67,6 +68,7 @@ jobs:
 #            /p:OutputPath=bin\${{ matrix.arch }}\${{ matrix.config }}\
 
       - name: Package to Zip
+        working-directory: .\openssh-portable
         shell: pwsh
         run: |
           $zipName = "ObfuscatedOpenSSH_Windows_${{ matrix.arch }}_${{ matrix.config }}.zip"
@@ -75,6 +77,7 @@ jobs:
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
+        working-directory: .\openssh-portable
         with:
           name: Build-${{ matrix.arch }}-${{ matrix.config }}
           path: "*.zip"
