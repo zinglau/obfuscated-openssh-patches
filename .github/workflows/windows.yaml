@@ -27,17 +27,19 @@ jobs:
           path: openssh-portable
           fetch-depth: 1
 
-      - name: Debug Directory
-        run: |
-          pwd
-          ls -Recurse -Depth 1
+      - name: Checkout upstream
+        uses: actions/checkout@v4
+        with:
+          repository: "Microsoft/Vcpkg"
+          path: vcpkg
+          fetch-depth: 1
 
       - name: Bootstrap vcpkg
-        working-directory: ./openssh-portable
-        run: .\openssh-portable\bootstrap-vcpkg.bat
+        working-directory: ./vcpkg
+        run: .\bootstrap-vcpkg.bat
 
       - name: Integrate vcpkg
-        working-directory: .\openssh-portable
+        working-directory: .\vcpkg
         run: .\vcpkg.exe integrate install
 
       - name: Build OpenSSH
