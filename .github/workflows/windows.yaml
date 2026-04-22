@@ -15,8 +15,8 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        arch: x86 # [x86, x64, ARM, ARM64]
-        config: Release #[Release, Debug]
+        arch: [x86] # [x86, x64, ARM, ARM64]
+        config: [Release] #[Release, Debug]
 
     steps:
       - name: Checkout upstream
