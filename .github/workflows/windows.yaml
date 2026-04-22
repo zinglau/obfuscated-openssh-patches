@@ -19,6 +19,11 @@ jobs:
         config: [Release] #[Release, Debug]
 
     steps:
+      - name: Checkout patches
+        uses: actions/checkout@v4
+        with:
+          path: patches
+
       - name: Checkout upstream
         uses: actions/checkout@v4
         with:
@@ -26,6 +31,19 @@ jobs:
           ref: ${{ github.event.inputs.tag_name != '' && github.event.inputs.tag_name || 'v9.8.3.0' }}
           path: openssh-portable
           fetch-depth: 1
+
+      - name: Apply Patch
+        run: |
+          $ver = "${{ github.event.inputs.patch != '' && github.event.inputs.patch || 'v9.8' }}"
+          $patchFile = "patches/windows/$ver.diff"
+          if (Test-Path $patchFile) {
+              echo "Applying patch: $patchFile"
+              cd openssh-portable
+              git apply "../$PatchFile"
+          } else {
+              echo "$patchFile not found! Quitting..."
+              exit 1
+          }
 
       - name: Checkout vcpkg
         uses: actions/checkout@v4
