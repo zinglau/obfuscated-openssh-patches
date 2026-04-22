@@ -27,31 +27,20 @@ jobs:
           path: openssh-portable
           fetch-depth: 1
 
-      - name: Checkout upstream
+      - name: Checkout vcpkg
         uses: actions/checkout@v4
         with:
           repository: "Microsoft/Vcpkg"
           path: vcpkg
           fetch-depth: 1
 
-      - name: Bootstrap vcpkg
-        working-directory: ./vcpkg
-        run: .\bootstrap-vcpkg.bat
-
-      - name: Integrate vcpkg
-        working-directory: .\vcpkg
-        run: .\vcpkg.exe integrate install
-
-      - name: Build OpenSSH
-        working-directory: .\openssh-portable
-        shell: powershell
+      - name: Bootstrap and integrate vcpkg
         run: |
-          ipmo .\contrib\win32\openssh\BuildHelper.psm1 -Force
-          Start-OpenSSHBuild -Configuration Release -NativeHostArch x64
+          cd vcpkg
+          .\bootstrap-vcpkg.bat
+          .\vcpkg.exe integrate install
 
       - name: Build and Package
-        working-directory: .\openssh-portable
-        shell: powershell
         run: |
           cd openssh-portable
           ipmo .\contrib\win32\openssh\OpenSSHBuildHelper.psm1 -Force
