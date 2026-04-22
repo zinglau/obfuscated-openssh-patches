@@ -20,4 +20,4 @@
 - [aligo](https://github.com/aligo) ported the patch to openssh-6.1 ([repo](https://github.com/aligo/obfuscated-openssh)).
 
 #### [Donate using LiberaPay](https://liberapay.com/ZingLau2015/donate)
-[![Donate using LiberaPay](https://liberapay.com/assets/widgets/donate.svg)](https://liberapay.com/ZingLau2015/donate)
+[![Donate using LiberaPay](https://img.shields.io/liberapay/receives/ZingLau2015.svg?logo=liberapay)](https://liberapay.com/ZingLau2015/donate)
