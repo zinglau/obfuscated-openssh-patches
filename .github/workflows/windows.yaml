@@ -34,7 +34,7 @@ jobs:
 
       - name: Apply Patch
         run: |
-          $ver = "${{ github.event.inputs.patch != '' && github.event.inputs.patch || 'v9.8' }}"
+          $ver = "${{ github.event.inputs.patch != '' && github.event.inputs.patch || '9.8' }}"
           $patchFile = "patches/windows/$ver.diff"
           if (Test-Path $patchFile) {
               echo "Applying patch: $patchFile"
