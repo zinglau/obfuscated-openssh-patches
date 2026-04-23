@@ -1,6 +1,91 @@
 name: Build obfuscated openssh-portable-win32
 
 on:
-  workflow_dispatch
+  push:
+    branches: [ debug-actions ]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Upstream release tag to build'
+        required: true
+        default: 'v9.8.3.0'
+      patch_name:
+        description: 'Patch version to apply'
+        required: true
+        default: '9.8'
 
 jobs:
+  patch-and-build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout patches
+        uses: actions/checkout@v4
+        with:
+          path: patches
+
+      - name: Checkout upstream
+        uses: actions/checkout@v4
+        with:
+          repository: "PowerShell/openssh-portable"
+          ref: ${{ github.event.inputs.tag_name }}
+          path: openssh-portable
+          fetch-depth: 1
+
+      - name: Apply Patch
+        run: |
+          $patchFile = "patches/windows/${{ github.event.inputs.patch_name }}.diff"
+          if (Test-Path $patchFile) {
+              echo "Applying patch: $patchFile"
+              cd openssh-portable
+              cmd /c "patch -p1 < ../$patchFile"
+          } else {
+              echo "$patchFile not found! Quitting..."
+              exit 1
+          }
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: "Microsoft/Vcpkg"
+          path: vcpkg
+          fetch-depth: 1
+
+      - name: Bootstrap and integrate vcpkg
+        run: |
+          cd vcpkg
+          .\bootstrap-vcpkg.bat
+          .\vcpkg.exe integrate install
+
+      - name: Build and package
+        run: |
+          cd openssh-portable
+          ipmo .\contrib\win32\openssh\OpenSSHBuildHelper.psm1 -Force
+          $architectures = @("x64", "x86", "ARM64")
+          $configurations = @("Release", "Debug")
+          foreach ($arch in $architectures) {
+              foreach ($config in $configurations) {
+                  Write-Host ">>> STARTING BUILD: Arch=$arch, Config=$config <<<" -ForegroundColor Cyan
+                  try {
+                      Start-OpenSSHBuild -Configuration $config -NativeHostArch $arch
+                      Write-Host ">>> SUCCESS: $arch $config <<<" -ForegroundColor Green
+                  }
+                  catch {
+                      Write-Host ">>> FAILED: $arch $config <<<" -ForegroundColor Red
+                      Write-Host "--- DETAILED BUILD LOG START ---" -ForegroundColor Red
+                      Get-Content ".\contrib\win32\openssh\OpenSSH$config$arch.log"
+                      Write-Host "--- DETAILED BUILD LOG END ---" -ForegroundColor Red
+                      exit 1
+                  }
+                  $folder = if ("$arch" -eq "x86") { "Win32" } else { "$arch" }
+                  $zipName = "..\ObfuscatedOpenSSH_Windows_$folder`_$config.zip"
+                  $targetPath = ".\bin\$folder\$config"
+                  Write-Host "--- Generating $zipName ---" -ForegroundColor Green
+                  Compress-Archive -Path "$targetPath*" -DestinationPath $zipName
+              }
+          }
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ github.event.inputs.patch != '' && github.event.inputs.patch || '9.8' }}"
+          path: "*.zip"
