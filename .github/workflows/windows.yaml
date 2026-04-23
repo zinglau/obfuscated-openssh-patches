@@ -6,9 +6,13 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Tag to build (leave empty for latest)'
+        description: 'Upstream release tag to build'
         required: true
-        default:
+        default: 'v9.8.3.0'
+      patch_name:
+        description: 'Patch version to apply'
+        required: true
+        default: '9.8'
 
 jobs:
   patch-and-build:
@@ -23,14 +27,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: "PowerShell/openssh-portable"
-          ref: ${{ github.event.inputs.tag_name != '' && github.event.inputs.tag_name || 'v9.8.3.0' }}
+          ref: ${{ github.event.inputs.tag_name }}
           path: openssh-portable
           fetch-depth: 1
 
       - name: Apply Patch
         run: |
-          $ver = "${{ github.event.inputs.patch != '' && github.event.inputs.patch || '9.8' }}"
-          $patchFile = "patches/windows/$ver.diff"
+          $patchFile = "patches/windows/${{ github.event.inputs.patch_name }}.diff"
           if (Test-Path $patchFile) {
               echo "Applying patch: $patchFile"
               cd openssh-portable
