@@ -76,7 +76,9 @@ jobs:
                       Write-Host "--- DETAILED BUILD LOG END ---" -ForegroundColor Red
                       exit 1
                   }
-                  Start-OpenSSHPackage -Configuration $config -NativeHostArch $arch
+                  Start-OpenSSHPackage -Configuration $config -NativeHostArch $arch -DestinationPath ".\built"
+                  $zipName = "..\Obfuscated_OpenSSH_Windows_$arch`_$config.zip"
+                  Compress-Archive -Path ".\built" -DestinationPath "$zipName"
               }
           }
 
