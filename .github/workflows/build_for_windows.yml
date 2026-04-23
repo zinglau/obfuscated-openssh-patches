@@ -76,11 +76,11 @@ jobs:
                       Write-Host "--- DETAILED BUILD LOG END ---" -ForegroundColor Red
                       exit 1
                   }
-                  $folder = if ("$arch" -eq "x86") { "Win32" } else { "$arch" }
-                  $zipName = "..\ObfuscatedOpenSSH_Windows_$folder`_$config.zip"
-                  $targetPath = ".\bin\$folder\$config"
+                  Start-OpenSSHPackage -Configuration $config -NativeHostArch $arch -DestinationPath ".\built"
+                  $zipName = "..\Obfuscated_OpenSSH_Windows_$arch`_$config.zip"
                   Write-Host "--- Generating $zipName ---" -ForegroundColor Green
-                  Compress-Archive -Path "$targetPath*" -DestinationPath $zipName
+                  $filesToPack = Get-ChildItem -Path ".\built\*" -Recurse -File -Exclude "*.pdb"
+                  Compress-Archive -Path $filesToPack.FullName -DestinationPath "$zipName"
               }
           }
 
