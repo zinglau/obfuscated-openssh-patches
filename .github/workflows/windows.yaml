@@ -7,18 +7,12 @@ on:
     inputs:
       tag_name:
         description: 'Tag to build (leave empty for latest)'
-        required: false
+        required: true
         default:
 
 jobs:
   patch-and-build:
     runs-on: windows-latest
-    strategy:
-      max-parallel: 1
-      matrix:
-        arch: [x86, x64, ARM64]
-        config: [Release, Debug]
-
     steps:
       - name: Checkout patches
         uses: actions/checkout@v4
