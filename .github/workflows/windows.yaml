@@ -78,7 +78,8 @@ jobs:
                   }
                   Start-OpenSSHPackage -Configuration $config -NativeHostArch $arch -DestinationPath ".\built"
                   $zipName = "..\Obfuscated_OpenSSH_Windows_$arch`_$config.zip"
-                  Compress-Archive -Path ".\built" -DestinationPath "$zipName"
+                  $filesToPack = Get-ChildItem -Path ".\built\*" -Recurse -File -Exclude "*.pdb"
+                  Compress-Archive -Path $filesToPack.FullName -DestinationPath "$zipName"
               }
           }
 
