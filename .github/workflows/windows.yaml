@@ -74,8 +74,8 @@ jobs:
                       exit 1
                   }
               $folder = if ("$arch" -eq "x86") { "Win32" } else { "$arch" }
-              $zipName = "ObfuscatedOpenSSH_Windows_$folder_$config.zip"
-              $targetPath = ".\openssh-portable\bin\$folder\$config"
+              $zipName = "..\ObfuscatedOpenSSH_Windows_$folder_$config.zip"
+              $targetPath = ".\bin\$folder\$config"
               Compress-Archive -Path "$targetPath*" -DestinationPath $zipName
               }
           }
