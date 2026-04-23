@@ -57,7 +57,7 @@ jobs:
         run: |
           cd openssh-portable
           ipmo .\contrib\win32\openssh\OpenSSHBuildHelper.psm1 -Force
-          Start-OpenSSHBuild -Configuration ${{ matrix.config }} -NativeHostArch ${{ matrix.arch }}
+          Start-OpenSSHBuild -Configuration $config -NativeHostArch $arch
           $architectures = @("x64", "x86", "ARM64")
           $configurations = @("Release", "Debug")
           foreach ($arch in $architectures) {
