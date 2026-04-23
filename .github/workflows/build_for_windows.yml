@@ -84,8 +84,14 @@ jobs:
               }
           }
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: "${{ github.event.inputs.patch != '' && github.event.inputs.patch || '9.8' }}"
-          path: "*.zip"
+          tag_name: ${{ github.event.inputs.tag_name }}
+          name: "Windows binaries ${{ github.event.inputs.tag_name }}"
+          draft: true
+          prerelease: false
+          files: |
+            *.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
