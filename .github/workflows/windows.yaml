@@ -59,29 +59,36 @@ jobs:
           .\bootstrap-vcpkg.bat
           .\vcpkg.exe integrate install
 
-      - name: Build and Package
+      - name: Build and package
         run: |
           cd openssh-portable
           ipmo .\contrib\win32\openssh\OpenSSHBuildHelper.psm1 -Force
           Start-OpenSSHBuild -Configuration ${{ matrix.config }} -NativeHostArch ${{ matrix.arch }}
-
-      - name: Print Build Log on Failure
-        if: failure()
-        run: |
-          cd openssh-portable
-          Write-Host "--- DETAILED BUILD LOG START ---" -ForegroundColor Red
-          Get-Content ".\contrib\win32\openssh\OpenSSH${{ matrix.config }}${{ matrix.arch }}.log"
-          Write-Host "--- DETAILED BUILD LOG END ---" -ForegroundColor Red
-
-      - name: Package to Zip
-        run: |
-          $arch = if ("${{ matrix.arch }}" -eq "x86") { "Win32" } else { "${{ matrix.arch }}" }
-          $zipName = "ObfuscatedOpenSSH_Windows_${{ matrix.arch }}_${{ matrix.config }}.zip"
-          $targetPath = ".\openssh-portable\bin\$arch\${{ matrix.config }}\"
-          Compress-Archive -Path "$targetPath*" -DestinationPath $zipName
+          $architectures = @("x64", "x86", "ARM64")
+          $configurations = @("Release", "Debug")
+          foreach ($arch in $architectures) {
+              foreach ($config in $configurations) {
+                  Write-Host ">>> STARTING BUILD: Arch=$arch, Config=$config <<<" -ForegroundColor Cyan
+                  try {
+                      Start-OpenSSHBuild -Configuration $config -NativeHostArch $arch
+                      Write-Host ">>> SUCCESS: $arch $config <<<" -ForegroundColor Green
+                  }
+                  catch {
+                      Write-Host ">>> FAILED: $arch $config <<<" -ForegroundColor Red
+                      Write-Host "--- DETAILED BUILD LOG START ---" -ForegroundColor Red
+                      Get-Content ".\contrib\win32\openssh\OpenSSH$config$arch.log"
+                      Write-Host "--- DETAILED BUILD LOG END ---" -ForegroundColor Red
+                      exit 1
+                  }
+              $folder = if ("$arch" -eq "x86") { "Win32" } else { "$arch" }
+              $zipName = "ObfuscatedOpenSSH_Windows_$folder_$config.zip"
+              $targetPath = ".\openssh-portable\bin\$folder\$config"
+              Compress-Archive -Path "$targetPath*" -DestinationPath $zipName
+              }
+          }
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Build-${{ matrix.arch }}-${{ matrix.config }}
+          name: "${{ github.event.inputs.patch != '' && github.event.inputs.patch || '9.8' }}"
           path: "*.zip"
