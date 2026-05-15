@@ -12,7 +12,7 @@ on:
       patch_name:
         description: 'Patch version to apply'
         required: true
-        default: '9.8'
+        default: '9.8_fix'
 
 jobs:
   patch-and-build:
@@ -38,7 +38,7 @@ jobs:
               echo "Applying patch: $patchFile"
               cd openssh-portable
               cmd /c "patch -p1 < ../$patchFile"
-              cmd /c "patch -p1 < ../windows/vcxproj.diff"
+              cmd /c "patch -p1 < ../patches/windows/vcxproj.diff"
           } else {
               echo "$patchFile not found! Quitting..."
               exit 1
