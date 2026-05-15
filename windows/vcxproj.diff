@@ -1,0 +1,11 @@
+diff --git a/contrib/win32/openssh/libssh.vcxproj b/contrib/win32/openssh/libssh.vcxproj
+--- a/contrib/win32/openssh/libssh.vcxproj
++++ b/contrib/win32/openssh/libssh.vcxproj
+@@ -449,6 +449,7 @@
+     <ClCompile Include="$(OpenSSH-Src-Path)ssh-ed25519-sk.c" />
+     <ClCompile Include="$(OpenSSH-Src-Path)ssh-sk.c" />
+     <ClCompile Include="$(OpenSSH-Src-Path)sshbuf-io.c" />
++    <ClCompile Include="$(OpenSSH-Src-Path)obfuscate.c" />
+     <ClCompile Include="..\..\..\cipher-chachapoly-libcrypto.c" />
+     <ClCompile Include="..\..\..\kex-names.c" />
+     <ClCompile Include="..\win32compat\spawn-ext.c" />

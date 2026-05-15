@@ -33,11 +33,12 @@ jobs:
 
       - name: Apply Patch
         run: |
-          $patchFile = "patches/windows/${{ github.event.inputs.patch_name }}.diff"
+          $patchFile = "patches/portable/${{ github.event.inputs.patch_name }}.diff"
           if (Test-Path $patchFile) {
               echo "Applying patch: $patchFile"
               cd openssh-portable
               cmd /c "patch -p1 < ../$patchFile"
+              cmd /c "patch -p1 < ../windows/vcxproj.diff"
           } else {
               echo "$patchFile not found! Quitting..."
               exit 1
