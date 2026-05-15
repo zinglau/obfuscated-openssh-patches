@@ -49,7 +49,7 @@ jobs:
         with:
           repository: "Microsoft/Vcpkg"
           path: vcpkg
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Bootstrap and integrate vcpkg
         run: |
